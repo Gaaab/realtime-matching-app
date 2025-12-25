@@ -113,3 +113,73 @@ export interface AblyChannelSubscription {
  * Chat sync status per channel
  */
 export type SyncStatus = 'syncing' | 'synced' | 'error'
+
+/**
+ * Connection state for Ably
+ */
+export type ConnectionState =
+  | 'initialized'
+  | 'connecting'
+  | 'connected'
+  | 'disconnected'
+  | 'suspended'
+  | 'closing'
+  | 'closed'
+  | 'failed'
+
+/**
+ * Ably error interface
+ */
+export interface AblyError {
+  code: number
+  message: string
+  statusCode: number
+  timestamp: string
+}
+
+/**
+ * Connection metrics for monitoring
+ */
+export interface ConnectionMetrics {
+  latency: number
+  lastPingAt: number | null
+  reconnectAttempts: number
+  totalReconnects: number
+  connectionUptime: number
+  lastConnectedAt: string | null
+  lastDisconnectedAt: string | null
+}
+
+/**
+ * Message queue configuration
+ */
+export interface QueuedMessage extends PendingMessage {
+  priority: number
+  expiresAt: string | null
+  metadata?: Record<string, unknown>
+}
+
+/**
+ * Chat error types
+ */
+export enum ChatErrorType {
+  NETWORK = 'network',
+  AUTH = 'auth',
+  RATE_LIMIT = 'rate_limit',
+  SERVER = 'server',
+  VALIDATION = 'validation',
+  UNKNOWN = 'unknown'
+}
+
+/**
+ * Parsed chat error
+ */
+export interface ChatError {
+  type: ChatErrorType
+  code: string
+  message: string
+  userMessage: string
+  retryable: boolean
+  retryAfterMs?: number
+  originalError?: unknown
+}

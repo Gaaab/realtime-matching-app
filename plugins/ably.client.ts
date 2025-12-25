@@ -20,23 +20,28 @@ export default defineNuxtPlugin(async () => {
   const authStore = useAuthStore()
 
   try {
-    // Wait for auth initialization to complete
+    // Wait for auth initialization to complete AND user to be loaded
     // This ensures user data is loaded from storage and profile is fetched
     let maxWaitTime = 10000 // 10 seconds max wait
     const waitInterval = 50
-    while (!authStore.initialized && maxWaitTime > 0) {
+    let iterations = 0
+
+    console.log('[Ably] Waiting for user authentication...')
+
+    // Wait for BOTH initialized flag AND user to be present
+    while ((!authStore.initialized || !authStore.user?.id) && maxWaitTime > 0) {
+      iterations++
+      if (iterations % 20 === 0) { // Log every 1 second
+        console.log(`[Ably] Still waiting... initialized=${authStore.initialized}, hasUser=${!!authStore.user?.id}`)
+      }
       await new Promise(resolve => setTimeout(resolve, waitInterval))
       maxWaitTime -= waitInterval
     }
 
-    if (!authStore.initialized) {
-      console.warn('Ably: Auth not initialized after waiting, proceeding anyway')
-    }
-
-    // If user is not authenticated, don't initialize Ably
-    // Real-time features require authentication
+    // If still no user after waiting, skip Ably initialization
     if (!authStore.user?.id) {
-      console.log('Ably: User not authenticated, skipping Ably initialization')
+      console.warn('[Ably] User ID not available after waiting, skipping Ably initialization')
+      console.log(`[Ably] Final state: initialized=${authStore.initialized}, user=${authStore.user}`)
       return {
         provide: {
           ably: null
@@ -45,6 +50,7 @@ export default defineNuxtPlugin(async () => {
     }
 
     const userId = authStore.user.id.toString()
+    console.log(`[Ably] User loaded successfully! Initializing with user ID ${userId}`)
 
     // Initialize Ably with token-based auth only (no API key exposed to client)
     // The authCallback will fetch tokens from our backend which includes the correct clientId
@@ -59,6 +65,7 @@ export default defineNuxtPlugin(async () => {
           })
 
           if (response.data) {
+            console.log('Ably: Received token from backend with clientId:', (response.data as any).clientId)
             callback(null, response.data as TokenRequest)
           } else {
             callback(new Error('No token object in response'), null)
@@ -68,8 +75,8 @@ export default defineNuxtPlugin(async () => {
           callback(error, null)
         }
       },
-      // Set clientId to match what the backend will return in the token
-      clientId: userId,
+      // IMPORTANT: Do NOT set clientId here - let the token from backend provide it
+      // This prevents mismatch errors between local clientId and token clientId
       autoConnect: false,
 
       // Connection options
