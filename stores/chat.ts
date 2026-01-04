@@ -173,6 +173,7 @@ export const useChatStore = defineStore('chat', {
 
     setMessages(channelId: number, messages: Message[]) {
       this.messages[channelId] = messages
+      this.sortMessagesInChannel(channelId)
     },
 
     addMessage(channelId: number, message: Message) {

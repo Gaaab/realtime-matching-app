@@ -1,5 +1,6 @@
 import { useProfileStore } from '~/stores/profile'
 import type { UserProfile, UserAttributes, UserInterest, UserPreferences } from '~/types/user'
+import type { ProfilePreview } from '~/types/profile'
 
 export const useProfile = () => {
   const api = useApi()
@@ -240,7 +241,41 @@ export const useProfile = () => {
     }
   }
 
+  // Profile Preview Methods (for viewing other users' profiles)
+  const fetchUserProfile = async (userId: number) => {
+    try {
+      const response = await api.get<ProfilePreview>(`/profile/users/${userId}/preview`)
+
+      if (response.success && response.data) {
+        return response.data
+      }
+
+      throw new Error(response.message || 'Failed to fetch user profile')
+    } catch (error: any) {
+      const errorMessage = error.message || 'Failed to fetch user profile'
+      console.error('Fetch user profile error:', error)
+      throw error
+    }
+  }
+
+  const revealProfile = async (userId: number) => {
+    try {
+      const response = await api.post(`/profile/users/${userId}/reveal`)
+
+      if (response.success && response.data) {
+        return response.data
+      }
+
+      throw new Error(response.message || 'Failed to reveal profile')
+    } catch (error: any) {
+      const errorMessage = error.message || 'Failed to reveal profile'
+      console.error('Reveal profile error:', error)
+      throw error
+    }
+  }
+
   return {
+    // Own profile methods
     fetchProfile,
     updateProfile,
     fetchAttributes,
@@ -252,6 +287,10 @@ export const useProfile = () => {
     uploadPhoto,
     deletePhoto,
     setProfilePicture,
+    // Other users' profile methods
+    fetchUserProfile,
+    revealProfile,
+    // Own profile state
     profile: computed(() => profileStore.profile),
     attributes: computed(() => profileStore.attributes),
     interests: computed(() => profileStore.interests),

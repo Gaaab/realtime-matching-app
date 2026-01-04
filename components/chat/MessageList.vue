@@ -19,19 +19,112 @@ const emit = defineEmits<{
   loadMore: []
 }>()
 
+// Scroll container reference
 const messagesContainer = ref<HTMLElement | null>(null)
 
-const scrollToBottom = () => {
-  if (messagesContainer.value) {
-    nextTick(() => {
-      messagesContainer.value?.scrollTo(0, messagesContainer.value.scrollHeight)
-    })
+// Track if user is near the bottom of the scroll container
+const isNearBottom = ref(true)
+
+// Threshold in pixels to consider "near bottom"
+const SCROLL_THRESHOLD = 100
+
+// Track if we should show "new messages" indicator
+const hasNewMessagesBelow = ref(false)
+
+/**
+ * Check if the user is near the bottom of the scroll container.
+ * This determines whether we should auto-scroll on new messages.
+ */
+const checkIfNearBottom = () => {
+  if (!messagesContainer.value) return
+
+  const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
+  const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+
+  isNearBottom.value = distanceFromBottom < SCROLL_THRESHOLD
+
+  // Clear the new messages indicator if user scrolls to bottom
+  if (isNearBottom.value) {
+    hasNewMessagesBelow.value = false
   }
 }
 
-watch(() => props.messages, scrollToBottom, { deep: true })
+/**
+ * Scroll to the bottom of the messages container.
+ * @param behavior - 'smooth' for animated scroll, 'auto' for instant scroll
+ */
+const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+  nextTick(() => {
+    if (!messagesContainer.value) return
 
-onMounted(scrollToBottom)
+    messagesContainer.value.scrollTo({
+      top: messagesContainer.value.scrollHeight,
+      behavior
+    })
+
+    // Clear the new messages indicator
+    hasNewMessagesBelow.value = false
+  })
+}
+
+/**
+ * Handle scroll events to track user position.
+ * Uses passive listener for better performance.
+ */
+const handleScroll = () => {
+  checkIfNearBottom()
+}
+
+// Watch for new messages and auto-scroll appropriately
+watch(
+  () => props.messages,
+  (newMessages, oldMessages) => {
+    // Skip if no new messages were added
+    if (!newMessages || !oldMessages || newMessages.length <= oldMessages.length) {
+      return
+    }
+
+    // Get the latest message
+    const latestMessage = newMessages[newMessages.length - 1]
+    if (!latestMessage) return
+
+    // Determine if we should auto-scroll:
+    // 1. User sent the message (always scroll to show their message)
+    // 2. User is already near the bottom (they're following the conversation)
+    const isOwnMessage = String(latestMessage.user_id) === String(props.currentUserId) ||
+                         String(latestMessage.sender_id) === String(props.currentUserId)
+
+    if (isOwnMessage || isNearBottom.value) {
+      scrollToBottom()
+    } else {
+      // User is reading older messages, show indicator instead of interrupting
+      hasNewMessagesBelow.value = true
+    }
+  },
+  { deep: true }
+)
+
+// Initial scroll to bottom when component mounts (with instant scroll for initial load)
+onMounted(() => {
+  scrollToBottom('auto')
+
+  // Add scroll listener with passive option for performance
+  if (messagesContainer.value) {
+    messagesContainer.value.addEventListener('scroll', handleScroll, { passive: true })
+  }
+})
+
+// Clean up scroll listener
+onBeforeUnmount(() => {
+  if (messagesContainer.value) {
+    messagesContainer.value.removeEventListener('scroll', handleScroll)
+  }
+})
+
+// Expose scrollToBottom for parent components to call
+defineExpose({
+  scrollToBottom
+})
 
 const formatTime = (timestamp: string) => {
   const date = new Date(timestamp)
@@ -57,7 +150,7 @@ const isConsecutive = (current: Message, previous: Message | undefined): boolean
 </script>
 
 <template>
-  <div class="flex flex-col h-full">
+  <div class="flex flex-col h-full relative">
     <!-- Loading State -->
     <div v-if="isLoading" class="flex-1 flex items-center justify-center">
       <div class="text-center">
@@ -75,7 +168,7 @@ const isConsecutive = (current: Message, previous: Message | undefined): boolean
     <div
       v-else
       ref="messagesContainer"
-      class="flex-1 overflow-y-auto px-4 py-6 space-y-4"
+      class="flex-1 overflow-y-auto px-4 py-6 space-y-4 relative scroll-smooth"
     >
       <!-- Load More Button -->
       <div v-if="hasMore" class="flex justify-center pt-4">
@@ -120,7 +213,7 @@ const isConsecutive = (current: Message, previous: Message | undefined): boolean
             class="flex-shrink-0"
           >
             <UiAvatar
-              :src="message.user?.profile_picture_url"
+              :src="message.user?.profile_picture_url ?? undefined"
               :alt="message.user?.first_name || 'User'"
               size="sm"
             />
@@ -209,6 +302,7 @@ const isConsecutive = (current: Message, previous: Message | undefined): boolean
         </div>
       </template>
     </div>
+
   </div>
 </template>
 

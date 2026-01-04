@@ -70,6 +70,7 @@ export interface NearbyUser {
     name: string
   }
   checked_in_at: string
+  is_revealed: boolean
 }
 
 export interface CheckInData {
@@ -77,4 +78,31 @@ export interface CheckInData {
   google_place_id: string
   latitude?: number
   longitude?: number
+}
+
+export interface VenueUser {
+  id: number
+  first_name: string
+  age: number
+  gender: string
+  avatar_url: string | null
+  checked_in_at: string
+  has_match: boolean
+  is_revealed: boolean
+  similarities_count: number
+  additional_similarities_count: number
+  lifestyle_attributes: LifestyleAttribute[]
+  interests: Interest[]
+}
+
+export interface LifestyleAttribute {
+  key: string
+  label: string
+  value: any
+}
+
+export interface Interest {
+  id: number
+  name: string
+  category: string | null
 }

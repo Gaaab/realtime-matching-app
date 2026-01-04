@@ -1,4 +1,4 @@
-import type { Venue, VenueSearchParams, VenueCheckIn, NearbyUser, CheckInData } from '~/types/venue'
+import type { Venue, VenueSearchParams, VenueCheckIn, NearbyUser, CheckInData, VenueUser } from '~/types/venue'
 
 export const useVenues = () => {
   const api = useApi()
@@ -21,7 +21,7 @@ export const useVenues = () => {
   const getNearbyVenues = async (
     latitude: number,
     longitude: number,
-    radius: number = 5000,
+    radius: number = 10,
     category?: string
   ) => {
     try {
@@ -130,6 +130,54 @@ export const useVenues = () => {
       throw new Error(response.message || 'Failed to fetch nearby users')
     } catch (error: any) {
       console.error('Get nearby users error:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get checked-in users at a venue with detailed profile information
+   * Avatars are automatically blurred unless mutually revealed
+   */
+  const getVenueUsers = async (venueId: number) => {
+    try {
+      const response = await api.get<VenueUser[]>(`/venue/${venueId}/users/detailed`)
+
+      if (response.success && response.data) {
+        return response.data
+      }
+
+      throw new Error(response.message || 'Failed to fetch venue users')
+    } catch (error: any) {
+      console.error('Get venue users error:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Reveal your profile to a user at the venue
+   * @param userId - The user ID to reveal to
+   * @param venueId - Optional venue ID for context
+   */
+  const revealProfile = async (userId: number, venueId?: number) => {
+    try {
+      const payload: any = {
+        user_id: userId,
+        reveal_type: 'full'
+      }
+
+      if (venueId) {
+        payload.venue_id = venueId
+      }
+
+      const response = await api.post('/match/reveals', payload)
+
+      if (response.success) {
+        return response.data
+      }
+
+      throw new Error(response.message || 'Failed to reveal profile')
+    } catch (error: any) {
+      console.error('Reveal profile error:', error)
       throw error
     }
   }
@@ -262,7 +310,9 @@ export const useVenues = () => {
     getMyCheckIns,
     getCurrentCheckIn,
     getNearbyUsers,
+    getVenueUsers,
     getVenueCheckIns,
+    revealProfile,
     loading,
     error,
   }

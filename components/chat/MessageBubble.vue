@@ -13,7 +13,56 @@ const props = withDefaults(defineProps<Props>(), {
   showAvatar: true
 })
 
-const isOwnMessage = computed(() => props.message.sender_id === props.currentUserId)
+// Check if message is from current user
+// Handle both sender.model_id (new API) and sender_id (legacy/optimistic)
+const isOwnMessage = computed(() => {
+  const senderId = props.message.sender?.model_id || props.message.user_id || props.message.sender_id
+  return senderId === props.currentUserId
+})
+
+// Get sender's display name
+// API returns sender.model.first_name, but we also support legacy user.first_name
+const senderName = computed(() => {
+  // New API format: sender.model.first_name
+  if (props.message.sender?.model) {
+    return props.message.sender.model.full_name
+      || props.message.sender.model.first_name
+      || 'Unknown'
+  }
+  // Legacy format: user.first_name
+  if (props.message.user) {
+    return props.message.user.first_name || 'Unknown'
+  }
+  return 'Unknown'
+})
+
+// Get sender's avatar URL
+// API returns sender.model.avatar_permanent_thumb_url, but we also support legacy formats
+// Returns undefined instead of null to match the Avatar component's expected prop type
+const senderAvatarUrl = computed((): string | undefined => {
+  // New API format: sender.model.avatar_permanent_url
+  if (props.message.sender?.model) {
+    return props.message.sender.model.avatar_permanent_thumb_url
+      || props.message.sender.model.avatar_permanent_url
+      || undefined
+  }
+  // Legacy format: user.profile_picture_url
+  if (props.message.user) {
+    return props.message.user.profile_picture_url || undefined
+  }
+  return undefined
+})
+
+// Get message text content
+// API returns 'data', but we normalize to 'content' for backward compatibility
+const messageText = computed(() => {
+  return props.message.content || props.message.data || ''
+})
+
+// Get message type - default to 'text' if not specified
+const messageType = computed(() => {
+  return props.message.message_type || 'text'
+})
 
 // Message status for screen readers
 const statusLabel = computed(() => {
@@ -64,10 +113,10 @@ const timestamp = computed(() => formatTime(props.message.created_at))
       class="flex-shrink-0"
     >
       <UiAvatar
-        v-if="message.sender"
-        :src="message.sender.profile_picture_url"
-        :name="message.sender.first_name"
-        :alt="`${message.sender.first_name || 'User'}'s avatar`"
+        v-if="senderName"
+        :src="senderAvatarUrl"
+        :name="senderName"
+        :alt="`${senderName}'s avatar`"
         size="sm"
       />
     </div>
@@ -82,14 +131,14 @@ const timestamp = computed(() => formatTime(props.message.created_at))
     >
       <!-- Sender Name (for first message in consecutive series) -->
       <p
-        v-if="!isConsecutive && message.sender"
+        v-if="!isConsecutive && senderName"
         :class="[
           'text-xs font-semibold mb-1 px-1',
           isOwnMessage ? 'text-right text-primary-600' : 'text-left text-gray-600'
         ]"
       >
         <span class="sr-only">Message from </span>
-        {{ isOwnMessage ? 'You' : message.sender.first_name }}
+        {{ isOwnMessage ? 'You' : senderName }}
       </p>
 
       <!-- Message Bubble -->
@@ -104,31 +153,31 @@ const timestamp = computed(() => formatTime(props.message.created_at))
         ]"
         tabindex="0"
         role="article"
-        :aria-label="`Message from ${isOwnMessage ? 'you' : message.sender?.first_name}: ${message.content}. ${statusLabel}, ${timestamp.accessible}`"
+        :aria-label="`Message from ${isOwnMessage ? 'you' : senderName}: ${messageText}. ${statusLabel}, ${timestamp.accessible}`"
       >
         <!-- Text Message -->
-        <p v-if="message.message_type === 'text'" class="text-sm leading-relaxed">
-          {{ message.content }}
+        <p v-if="messageType === 'text'" class="text-sm leading-relaxed">
+          {{ messageText }}
         </p>
 
         <!-- Image Message -->
-        <div v-else-if="message.message_type === 'image'" class="space-y-2">
+        <div v-else-if="messageType === 'image'" class="space-y-2">
           <img
             v-if="message.media_url"
             :src="message.media_url"
-            :alt="message.content || 'Shared image'"
+            :alt="messageText || 'Shared image'"
             class="rounded-lg max-w-full h-auto"
             loading="lazy"
           />
-          <p v-if="message.content" class="text-sm">{{ message.content }}</p>
+          <p v-if="messageText" class="text-sm">{{ messageText }}</p>
         </div>
 
         <!-- System Message -->
         <p
-          v-else-if="message.message_type === 'system'"
+          v-else-if="messageType === 'system'"
           class="text-xs italic text-center"
         >
-          {{ message.content }}
+          {{ messageText }}
         </p>
       </div>
 

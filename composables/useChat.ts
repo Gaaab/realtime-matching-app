@@ -1,5 +1,17 @@
 import { useChatStore } from '~/stores/chat'
-import type { Channel, Message, SendMessageData, PendingMessage, OnlineUser } from '~/types/chat'
+import type {
+  Channel,
+  Message,
+  SendMessageData,
+  PendingMessage,
+  OnlineUser,
+  ChannelFilterOptions,
+  normalizeMessage
+} from '~/types/chat'
+
+// HTTP status codes for specific error handling
+const HTTP_FORBIDDEN = 403
+const HTTP_NOT_FOUND = 404
 
 export const useChat = () => {
   const api = useApi()
@@ -10,16 +22,82 @@ export const useChat = () => {
   const processedMessageIds = ref<Set<string>>(new Set())
   const processingMessageIds = ref<Set<string>>(new Set())
 
-  const fetchChannels = async () => {
+  // Filter state for archived channels
+  const includeArchived = ref(false)
+
+  /**
+   * Build query params for channel list API
+   */
+  const buildChannelQueryParams = (options: ChannelFilterOptions = {}) => {
+    const params: Record<string, string> = {}
+
+    if (options.include_archived || includeArchived.value) {
+      params['filter[include_archived]'] = 'true'
+    }
+
+    if (options.with_empty_conversation) {
+      params['filter[with_empty_conversation]'] = 'true'
+    }
+
+    if (options.page) {
+      params.page = String(options.page)
+    }
+
+    if (options.per_page) {
+      params.per_page = String(options.per_page)
+    }
+
+    return params
+  }
+
+  /**
+   * Normalize channel data from API response
+   * Computes display name from members for direct channels
+   */
+  const normalizeChannel = (channel: Channel, currentUserId?: number): Channel => {
+    let name = channel.name
+
+    // For direct channels, derive name from the other member
+    if (channel.type === 'direct' && channel.members.length > 0 && currentUserId) {
+      const otherMember = channel.members.find(m => m.model_id !== currentUserId)
+      if (otherMember) {
+        // Use full_name, first_name, or legacy name field
+        name = otherMember.model.full_name || otherMember.model.first_name || otherMember.model.name || 'Unknown'
+      }
+    } else if (channel.meta?.label) {
+      name = channel.meta.label
+    }
+
+    return {
+      ...channel,
+      name
+    }
+  }
+
+  /**
+   * Fetch channels with optional filters
+   * @param options - Filter options for the API call
+   */
+  const fetchChannels = async (options: ChannelFilterOptions = {}) => {
     try {
       chatStore.setLoading(true)
       chatStore.setError(null)
 
-      const response = await api.get<Channel[]>('/chat/channels')
+      const params = buildChannelQueryParams(options)
+      const response = await api.get<Channel[]>('/chat/channels', params)
 
       if (response.success && response.data) {
-        chatStore.setChannels(response.data)
-        return response.data
+        // Get current user ID for normalizing channel names
+        const authStore = useAuthStore()
+        const currentUserId = authStore.user?.id
+
+        // Normalize channels (add display names, etc.)
+        const normalizedChannels = response.data.map(ch =>
+          normalizeChannel(ch, currentUserId)
+        )
+
+        chatStore.setChannels(normalizedChannels)
+        return normalizedChannels
       }
 
       throw new Error(response.message || 'Failed to fetch channels')
@@ -33,6 +111,22 @@ export const useChat = () => {
     }
   }
 
+  /**
+   * Toggle showing archived channels
+   */
+  const toggleArchivedChannels = async () => {
+    includeArchived.value = !includeArchived.value
+    return await fetchChannels({ include_archived: includeArchived.value })
+  }
+
+  /**
+   * Set archived filter state
+   */
+  const setIncludeArchived = async (value: boolean) => {
+    includeArchived.value = value
+    return await fetchChannels({ include_archived: value })
+  }
+
   const fetchChannel = async (channelId: number) => {
     try {
       chatStore.setLoading(true)
@@ -41,9 +135,13 @@ export const useChat = () => {
       const response = await api.get<Channel>(`/chat/channels/${channelId}`)
 
       if (response.success && response.data) {
-        chatStore.addChannel(response.data)
-        chatStore.setCurrentChannel(response.data)
-        return response.data
+        // Normalize channel with display name
+        const authStore = useAuthStore()
+        const normalizedChannel = normalizeChannel(response.data, authStore.user?.id)
+
+        chatStore.addChannel(normalizedChannel)
+        chatStore.setCurrentChannel(normalizedChannel)
+        return normalizedChannel
       }
 
       throw new Error(response.message || 'Failed to fetch channel')
@@ -57,6 +155,46 @@ export const useChat = () => {
     }
   }
 
+  /**
+   * Check if a channel is archived (read-only)
+   */
+  const isChannelArchived = (channel: Channel | null): boolean => {
+    return channel?.archived_at !== null && channel?.archived_at !== undefined
+  }
+
+  /**
+   * Get archived channel error message
+   */
+  const getArchivedChannelMessage = (): string => {
+    return 'This chat is archived. You can view the conversation but cannot send new messages.'
+  }
+
+  /**
+   * Normalize message from API response for backward compatibility
+   * The API returns sender as a Member with nested model (User)
+   */
+  const normalizeMessageData = (message: Message, channelId: number): Message => {
+    // Extract user info from sender.model if available
+    const senderUser = message.sender?.model
+    const avatarUrl = senderUser?.avatar_permanent_thumb_url
+      || senderUser?.avatar_permanent_url
+      || senderUser?.avatar
+      || null
+
+    return {
+      ...message,
+      channel_id: channelId,
+      content: message.data || message.content || '',
+      user_id: message.sender?.model_id || message.sender_id,
+      user: senderUser ? {
+        id: senderUser.id,
+        first_name: senderUser.first_name,
+        profile_picture_url: avatarUrl
+      } : message.user,
+      read_at: message.is_read ? message.updated_at : null
+    }
+  }
+
   const fetchMessages = async (channelId: number, page: number = 1, limit: number = 50) => {
     try {
       chatStore.setLoading(true)
@@ -64,16 +202,21 @@ export const useChat = () => {
 
       const response = await api.get<Message[]>(`/chat/channels/${channelId}/messages`, {
         page,
-        limit,
+        per_page: limit,
       })
 
       if (response.success && response.data) {
+        // Normalize messages for backward compatibility
+        const normalizedMessages = response.data.map(msg =>
+          normalizeMessageData(msg, channelId)
+        )
+
         if (page === 1) {
-          chatStore.setMessages(channelId, response.data)
+          chatStore.setMessages(channelId, normalizedMessages)
         } else {
-          chatStore.prependMessages(channelId, response.data)
+          chatStore.prependMessages(channelId, normalizedMessages)
         }
-        return response.data
+        return normalizedMessages
       }
 
       throw new Error(response.message || 'Failed to fetch messages')
@@ -87,17 +230,99 @@ export const useChat = () => {
     }
   }
 
-  const sendMessage = async (channelId: number, data: SendMessageData) => {
-    try {
-      const response = await api.post<Message>(`/chat/channels/${channelId}/messages`, data)
+  /**
+   * Custom error class for archived channel operations
+   */
+  class ArchivedChannelError extends Error {
+    constructor(message: string = 'This chat is archived and read-only.') {
+      super(message)
+      this.name = 'ArchivedChannelError'
+    }
+  }
 
-      if (response.success && response.data) {
-        chatStore.addMessage(channelId, response.data)
-        return response.data
+  const sendMessage = async (channelId: number, data: SendMessageData) => {
+    // Check if channel is archived before attempting to send
+    const channel = chatStore.getChannelById(channelId)
+    if (channel && isChannelArchived(channel)) {
+      const error = new ArchivedChannelError(getArchivedChannelMessage())
+      chatStore.setError(error.message)
+      throw error
+    }
+
+    // Get current user for optimistic message
+    const authStore = useAuthStore()
+    const currentUser = authStore.user
+
+    try {
+      // Transform data to match API expected format
+      const payload = {
+        data: data.data || data.content || '',
       }
+
+      // Create optimistic message with temporary negative ID
+      const tempId = -Date.now()
+      const userProfile = currentUser?.profile
+      const optimisticMessage: Message = {
+        id: tempId,
+        sender_type: 'user',
+        sender_id: currentUser?.id || 0,
+        data: payload.data,
+        content: payload.data,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted_at: null,
+        is_read: false,
+        sender: null,
+        attachments: [],
+        link_preview: null,
+        channel_id: channelId,
+        user_id: currentUser?.id || 0,
+        user: userProfile ? {
+          id: currentUser?.id || 0,
+          first_name: userProfile.first_name || 'You',
+          profile_picture_url: userProfile.profile_picture_url || null
+        } : undefined,
+        message_type: 'text',
+        status: 'pending'
+      }
+
+      // Add optimistic message to store immediately
+      chatStore.addMessage(channelId, optimisticMessage)
+
+      const response = await api.post<Message>(`/chat/channels/${channelId}/messages`, payload)
+
+      // API returns empty data on success, so we keep the optimistic message
+      // The real message will come through Ably real-time subscription
+      if (response.success) {
+        // Update the optimistic message status to sent
+        const updatedMessage = { ...optimisticMessage, status: 'sent' as const }
+        // Remove the temporary message - real one will arrive via Ably
+        // For now, we keep it to show immediate feedback
+        return updatedMessage
+      }
+
+      // If failed, remove optimistic message
+      const messages = chatStore.getMessagesByChannel(channelId)
+      chatStore.setMessages(
+        channelId,
+        messages.filter(m => m.id !== tempId)
+      )
 
       throw new Error(response.message || 'Failed to send message')
     } catch (error: any) {
+      // Handle 403 Forbidden specifically for archived channels
+      if (error.http_status === HTTP_FORBIDDEN) {
+        const archivedError = new ArchivedChannelError(
+          'Cannot send message. This chat may be archived or you no longer have access.'
+        )
+        chatStore.setError(archivedError.message)
+
+        // Mark the channel as archived in the store if we get 403
+        chatStore.updateChannel(channelId, { archived_at: new Date().toISOString() })
+
+        throw archivedError
+      }
+
       const errorMessage = error.message || 'Failed to send message'
       chatStore.setError(errorMessage)
       console.error('Send message error:', error)
@@ -106,12 +331,12 @@ export const useChat = () => {
   }
 
   const sendTextMessage = async (channelId: number, content: string) => {
-    return await sendMessage(channelId, { content, message_type: 'text' })
+    return await sendMessage(channelId, { data: content })
   }
 
   const sendImageMessage = async (channelId: number, mediaUrl: string, content?: string) => {
     return await sendMessage(channelId, {
-      content: content || '',
+      data: content || '',
       message_type: 'image',
       media_url: mediaUrl,
     })
@@ -204,44 +429,101 @@ export const useChat = () => {
   /**
    * Subscribe to channel real-time updates via Ably
    * Handles message creation, updates, deletions, and typing indicators
+   *
+   * @param channelId - Numeric channel ID for store management
+   * @param channelUuid - Channel UUID (channel_id) for Ably subscriptions
    */
-  const subscribeToChannelUpdates = (channelId: number) => {
-    const unsubscribe = subscribeToChannel(channelId, {
-      onMessage: (event) => {
-        const message = event.data as Message
-        const messageKey = `${message.id}`
+  const subscribeToChannelUpdates = (channelId: number, channelUuid: string) => {
+    // Get current user for deduplication of own optimistic messages
+    const authStore = useAuthStore()
+    const currentUserId = authStore.user?.id
 
-        // Deduplication: Skip if already processed
+    console.log(`[Ably] Setting up subscription for channel ${channelId} (UUID: ${channelUuid})`)
+
+    const unsubscribe = subscribeToChannel(channelUuid, {
+      onMessage: (event) => {
+        // Ably event structure: { data: <payload>, name: 'message:created', ... }
+        const rawMessage = event.data as Message
+        const messageKey = `${rawMessage.id}`
+
+        console.log(`[Ably] message:created event received:`, {
+          messageId: rawMessage.id,
+          senderId: rawMessage.sender_id,
+          content: rawMessage.data?.substring(0, 50),
+          alreadyProcessed: processedMessageIds.value.has(messageKey)
+        })
+
+        // Deduplication: Skip if already processed (e.g., from initial fetch)
         if (processedMessageIds.value.has(messageKey)) {
+          console.log(`[Ably] Skipping duplicate message: ${rawMessage.id}`)
           return
         }
 
+        // Normalize the message to ensure channel_id, content, user fields are set
+        const message = normalizeMessageData(rawMessage, channelId)
+
+        console.log(`[Ably] Normalized message:`, {
+          id: message.id,
+          channel_id: message.channel_id,
+          content: message.content?.substring(0, 50),
+          user_id: message.user_id,
+          user: message.user
+        })
+
         processedMessageIds.value.add(messageKey)
+
+        // If this message is from the current user, remove any pending optimistic messages
+        // This handles the case where we sent a message via API and the real one arrives via Ably
+        if (message.sender_id === currentUserId || message.user_id === currentUserId) {
+          const existingMessages = chatStore.getMessagesByChannel(channelId)
+          const pendingMessages = existingMessages.filter(
+            m => m.id < 0 && (m.sender_id === currentUserId || m.user_id === currentUserId) && m.status === 'pending'
+          )
+          if (pendingMessages.length > 0) {
+            console.log(`[Ably] Removing ${pendingMessages.length} optimistic message(s) for user ${currentUserId}`)
+            chatStore.setMessages(
+              channelId,
+              existingMessages.filter(m => !(m.id < 0 && (m.sender_id === currentUserId || m.user_id === currentUserId) && m.status === 'pending'))
+            )
+          }
+        }
+
         chatStore.addMessage(channelId, message)
-        console.log(`Real-time message received: ${message.id}`)
+        console.log(`[Ably] Message ${message.id} added to store for channel ${channelId}`)
       },
       onUpdate: (event) => {
-        const updatedMessage = event.data as Message
+        const rawMessage = event.data as Message
+        console.log(`[Ably] message:updated event received: ${rawMessage.id}`)
+
         const messages = chatStore.getMessagesByChannel(channelId)
-        if (messages.some((m) => m.id === updatedMessage.id)) {
+        if (messages.some((m) => m.id === rawMessage.id)) {
+          // Normalize the message to ensure channel_id and content are set
+          const updatedMessage = normalizeMessageData(rawMessage, channelId)
           chatStore.addMessage(channelId, updatedMessage)
+          console.log(`[Ably] Message ${updatedMessage.id} updated in store`)
         }
       },
       onDelete: (event) => {
-        const messageId = event.data.id
+        const messageId = event.data?.id || event.data
+        console.log(`[Ably] message:deleted event received: ${messageId}`)
+
         const messages = chatStore.getMessagesByChannel(channelId)
         chatStore.setMessages(
           channelId,
           messages.filter((m) => m.id !== messageId)
         )
+        // Remove from processed set to allow re-processing if message is somehow re-sent
+        processedMessageIds.value.delete(`${messageId}`)
+        console.log(`[Ably] Message ${messageId} removed from store`)
       },
       onError: (err) => {
-        console.error('Ably channel error:', err)
+        console.error('[Ably] Channel subscription error:', err)
         chatStore.setError(err.message)
       }
     })
 
     chatStore.setChannelSubscribed(channelId, true)
+    console.log(`[Ably] Successfully subscribed to channel ${channelId}`)
     return unsubscribe
   }
 
@@ -250,29 +532,47 @@ export const useChat = () => {
    * Fetches history, subscribes to updates, loads presence
    */
   const openChannelWithAbly = async (channelId: number) => {
+    console.log(`[Chat] Opening channel ${channelId} with Ably...`)
+
     try {
       chatStore.setLoading(true)
       chatStore.setSyncStatus(channelId, 'syncing')
 
+      // Fetch channel to get the channel_id UUID for Ably
+      const channel = await fetchChannel(channelId)
+      if (!channel || !channel.channel_id) {
+        throw new Error('Channel not found or missing channel_id UUID')
+      }
+
+      console.log(`[Chat] Channel fetched: id=${channel.id}, uuid=${channel.channel_id}`)
+
+      // Clear processed message IDs for this channel to start fresh
+      // This prevents stale deduplication data from blocking new messages
+      processedMessageIds.value.clear()
+      console.log(`[Chat] Cleared processed message IDs`)
+
       // Fetch message history from API
       const messagesResponse = await fetchMessages(channelId, 1, 50)
+      console.log(`[Chat] Fetched ${messagesResponse.length} messages from history`)
+
       messagesResponse.forEach((msg) => {
         processedMessageIds.value.add(msg.id.toString())
       })
+      console.log(`[Chat] Added ${messagesResponse.length} message IDs to processed set`)
 
-      // Subscribe to real-time updates
-      subscribeToChannelUpdates(channelId)
+      // Subscribe to real-time updates using the channel_id UUID
+      subscribeToChannelUpdates(channelId, channel.channel_id)
 
       // Load online users (presence)
-      await loadChannelPresence(channelId)
+      await loadChannelPresence(channelId, channel.channel_id)
 
       chatStore.setSyncStatus(channelId, 'synced')
       chatStore.setLastSyncedAt(channelId, new Date().toISOString())
-      console.log(`Channel ${channelId} opened with Ably`)
+      console.log(`[Chat] Channel ${channelId} (${channel.channel_id}) opened with Ably successfully`)
     } catch (error: any) {
       chatStore.setSyncStatus(channelId, 'error')
       chatStore.setError(error.message)
-      console.error('Error opening channel with Ably:', error)
+      console.error('[Chat] Error opening channel with Ably:', error)
       throw error
     } finally {
       chatStore.setLoading(false)
@@ -281,11 +581,14 @@ export const useChat = () => {
 
   /**
    * Load online users (presence) in a channel via Ably
+   *
+   * @param channelId - Numeric channel ID for store management
+   * @param channelUuid - Channel UUID (channel_id) for Ably presence
    */
-  const loadChannelPresence = async (channelId: number) => {
+  const loadChannelPresence = async (channelId: number, channelUuid: string) => {
     try {
       // Subscribe to presence changes
-      subscribeToPresence(channelId, {
+      subscribeToPresence(channelUuid, {
         onEnter: (member) => {
           const user: OnlineUser = {
             id: member.data?.userId || 0,
@@ -322,11 +625,21 @@ export const useChat = () => {
 
   /**
    * Publish typing indicator via Ably
+   *
+   * @param channelId - Numeric channel ID (will be used to look up channel_id UUID)
+   * @param isTyping - Whether the user is typing
    */
   const publishTypingViaAbly = async (channelId: number, isTyping: boolean) => {
     try {
+      // Get the channel to find the channel_id UUID
+      const channel = chatStore.getChannelById(channelId)
+      if (!channel || !channel.channel_id) {
+        console.warn('Cannot publish typing: channel not found or missing channel_id UUID')
+        return
+      }
+
       const authStore = useAuthStore()
-      await publishMessage(channelId, 'typing', {
+      await publishMessage(channel.channel_id, 'typing', {
         userId: authStore.user?.id,
         isTyping,
         timestamp: new Date().toISOString()
@@ -357,6 +670,7 @@ export const useChat = () => {
         })
 
         const payload: SendMessageData = {
+          data: queuedMsg.content,
           content: queuedMsg.content,
           message_type: queuedMsg.messageType as any,
           media_url: queuedMsg.mediaUrl
@@ -460,6 +774,12 @@ export const useChat = () => {
     setTypingIndicator,
     uploadChatImage,
 
+    // ========== ARCHIVED CHANNEL METHODS ==========
+    toggleArchivedChannels,
+    setIncludeArchived,
+    isChannelArchived,
+    getArchivedChannelMessage,
+
     // ========== ABLY REAL-TIME METHODS ==========
     openChannelWithAbly,
     subscribeToChannelUpdates,
@@ -502,5 +822,22 @@ export const useChat = () => {
     error: computed(() => chatStore.error),
     unreadCount: computed(() => chatStore.unreadCount),
     hasUnreadMessages: computed(() => chatStore.hasUnreadMessages),
+
+    // ========== FILTER STATE ==========
+    includeArchived: computed(() => includeArchived.value),
+
+    // ========== ACTIVE VS ARCHIVED CHANNELS ==========
+    activeChannels: computed(() => {
+      return chatStore.sortedChannels.filter(ch => !ch.archived_at)
+    }),
+    archivedChannels: computed(() => {
+      return chatStore.sortedChannels.filter(ch => ch.archived_at !== null)
+    }),
+
+    // ========== CURRENT CHANNEL STATE ==========
+    isCurrentChannelArchived: computed(() => {
+      const channel = chatStore.currentChannel
+      return channel ? isChannelArchived(channel) : false
+    }),
   }
 }

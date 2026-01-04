@@ -477,6 +477,169 @@ export async function mockSettingsUpdate(page: Page) {
 }
 
 /**
+ * Mock onboarding profile update (name, birthdate, gender)
+ */
+export async function mockOnboardingProfileUpdate(page: Page) {
+  await page.route('**/api/v1/auth/profile', async (route: Route) => {
+    if (route.request().method() === 'PUT' || route.request().method() === 'PATCH') {
+      const postData = JSON.parse(route.request().postData() || '{}');
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            ...validUser,
+            ...postData,
+            onboarding_completed: false
+          },
+          message: 'Profile updated successfully'
+        })
+      });
+    } else {
+      await route.continue();
+    }
+  });
+}
+
+/**
+ * Mock onboarding attributes update (ethnicity, work, kids, smoking, religion)
+ */
+export async function mockOnboardingAttributesUpdate(page: Page) {
+  await page.route('**/api/v1/profile/user/attributes', async (route: Route) => {
+    if (route.request().method() === 'PUT' || route.request().method() === 'PATCH') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            attributes: JSON.parse(route.request().postData() || '{}').attributes
+          },
+          message: 'Attributes updated successfully'
+        })
+      });
+    } else {
+      await route.continue();
+    }
+  });
+}
+
+/**
+ * Mock onboarding preferences update
+ */
+export async function mockOnboardingPreferencesUpdate(page: Page) {
+  await page.route('**/api/v1/profile/user/preferences', async (route: Route) => {
+    if (route.request().method() === 'PUT' || route.request().method() === 'PATCH') {
+      const postData = JSON.parse(route.request().postData() || '{}');
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            id: 1,
+            user_id: 1,
+            ...postData
+          },
+          message: 'Preferences updated successfully'
+        })
+      });
+    } else {
+      await route.continue();
+    }
+  });
+}
+
+/**
+ * Mock onboarding interests update
+ */
+export async function mockOnboardingInterestsUpdate(page: Page) {
+  await page.route('**/api/v1/profile/user/interests', async (route: Route) => {
+    if (route.request().method() === 'PUT' || route.request().method() === 'PATCH') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            interests: []
+          },
+          message: 'Interests updated successfully'
+        })
+      });
+    } else {
+      await route.continue();
+    }
+  });
+}
+
+/**
+ * Mock onboarding dealbreaker creation
+ */
+export async function mockOnboardingDealbreakerCreate(page: Page) {
+  await page.route('**/api/v1/profile/user/dealbreakers', async (route: Route) => {
+    if (route.request().method() === 'POST') {
+      const postData = JSON.parse(route.request().postData() || '{}');
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            id: Date.now(),
+            user_id: 1,
+            ...postData,
+            created_at: new Date().toISOString()
+          },
+          message: 'Dealbreaker created successfully'
+        })
+      });
+    } else {
+      await route.continue();
+    }
+  });
+}
+
+/**
+ * Mock onboarding completion
+ */
+export async function mockOnboardingComplete(page: Page) {
+  await page.route('**/api/v1/auth/onboarding/complete', async (route: Route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            ...validUser,
+            onboarding_completed: true,
+            onboarding_completed_at: new Date().toISOString()
+          },
+          message: 'Onboarding completed successfully'
+        })
+      });
+    } else {
+      await route.continue();
+    }
+  });
+}
+
+/**
+ * Mock all onboarding API endpoints
+ * Convenience function to set up all onboarding mocks at once
+ */
+export async function mockOnboardingFlow(page: Page) {
+  await mockOnboardingProfileUpdate(page);
+  await mockOnboardingAttributesUpdate(page);
+  await mockOnboardingPreferencesUpdate(page);
+  await mockOnboardingInterestsUpdate(page);
+  await mockOnboardingDealbreakerCreate(page);
+  await mockOnboardingComplete(page);
+}
+
+/**
  * Clear all route mocks
  */
 export async function clearAllMocks(page: Page) {

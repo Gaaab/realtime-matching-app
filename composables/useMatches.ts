@@ -190,6 +190,120 @@ export const useMatches = () => {
     }
   }
 
+  /**
+   * Unmatch a user with a reason
+   * @param matchId - The match ID to unmatch
+   * @param reason - The unmatch reason enum value (not_interested, user_requested, blocked)
+   * @param reportDescription - Optional report description (max 1000 chars)
+   * @param reportReasonId - Optional report category ID (if also reporting)
+   * @param reportMediaIds - Optional media attachment IDs (max 5)
+   */
+  const unmatchWithReason = async (
+    matchId: number,
+    reason?: string,
+    reportDescription?: string,
+    reportReasonId?: number,
+    reportMediaIds?: number[]
+  ) => {
+    try {
+      matchesStore.setLoading(true)
+      matchesStore.setError(null)
+
+      const payload: {
+        reason?: string
+        report_description?: string
+        report_reason_id?: number
+        report_media_ids?: number[]
+      } = {}
+
+      // Add reason if provided (should be enum value: not_interested, user_requested, blocked)
+      if (reason) {
+        payload.reason = reason
+      }
+
+      // Add report description if provided
+      if (reportDescription) {
+        payload.report_description = reportDescription
+      }
+
+      // Add report reason ID if provided (for combined unmatch + report)
+      if (reportReasonId) {
+        payload.report_reason_id = reportReasonId
+      }
+
+      // Add report media IDs if provided
+      if (reportMediaIds && reportMediaIds.length > 0) {
+        payload.report_media_ids = reportMediaIds
+      }
+
+      const response = await api.post(`/match/matches/${matchId}/unmatch`, payload)
+
+      if (response.success) {
+        matchesStore.removeMatch(matchId)
+        return true
+      }
+
+      throw new Error(response.message || 'Failed to unmatch user')
+    } catch (error: any) {
+      const errorMessage = error.message || 'Failed to unmatch user'
+      matchesStore.setError(errorMessage)
+      console.error('Unmatch with reason error:', error)
+      throw error
+    } finally {
+      matchesStore.setLoading(false)
+    }
+  }
+
+  /**
+   * Report a match
+   * @param matchId - The match ID to report
+   * @param reasonId - The report category ID (required)
+   * @param description - Optional report description (max 1000 chars)
+   * @param mediaIds - Optional media attachment IDs (max 5)
+   */
+  const reportMatch = async (
+    matchId: number,
+    reasonId: number,
+    description?: string,
+    mediaIds?: number[]
+  ) => {
+    try {
+      matchesStore.setLoading(true)
+      matchesStore.setError(null)
+
+      const payload: {
+        reason_id: number
+        description?: string
+        media_ids?: number[]
+      } = {
+        reason_id: reasonId
+      }
+
+      if (description) {
+        payload.description = description
+      }
+
+      if (mediaIds && mediaIds.length > 0) {
+        payload.media_ids = mediaIds
+      }
+
+      const response = await api.post(`/match/matches/${matchId}/report`, payload)
+
+      if (response.success) {
+        return true
+      }
+
+      throw new Error(response.message || 'Failed to report user')
+    } catch (error: any) {
+      const errorMessage = error.message || 'Failed to report user'
+      matchesStore.setError(errorMessage)
+      console.error('Report match error:', error)
+      throw error
+    } finally {
+      matchesStore.setLoading(false)
+    }
+  }
+
   const fetchReveals = async () => {
     try {
       matchesStore.setLoading(true)
@@ -280,6 +394,8 @@ export const useMatches = () => {
     acceptMatch,
     rejectMatch,
     unmatchUser,
+    unmatchWithReason,
+    reportMatch,
     fetchReveals,
     revealProfile,
     sendReveal,

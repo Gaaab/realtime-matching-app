@@ -72,7 +72,7 @@ const handleSearch = async (query: string) => {
         location: query.trim(),
         latitude: userLocation.value?.latitude,
         longitude: userLocation.value?.longitude,
-        radius: 50000, // 50km radius for search
+        radius: 10, // 50km radius for search
         limit: 50
       }
 
@@ -190,7 +190,7 @@ const fetchAndSaveGooglePlaces = async (location: google.maps.LatLngLiteral) => 
       await venuesStore.fetchNearbyVenues(
         location.lat,
         location.lng,
-        5000
+        10
       )
     } else {
       // Update the venues store with the saved venues
@@ -203,7 +203,7 @@ const fetchAndSaveGooglePlaces = async (location: google.maps.LatLngLiteral) => 
     await venuesStore.fetchNearbyVenues(
       location.lat,
       location.lng,
-      5000
+      10
     )
   } finally {
     isFetchingPlaces.value = false

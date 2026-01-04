@@ -6,7 +6,7 @@ const props = defineProps<{
 }>()
 
 const { sendReveal, isLoading: isSendingReveal } = useMatches()
-const revealSent = ref(false)
+const revealSent = ref(props.user.is_revealed || false)
 const revealPending = ref(false)
 const error = ref<string | null>(null)
 
