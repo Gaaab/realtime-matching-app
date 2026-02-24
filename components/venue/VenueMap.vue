@@ -1,101 +1,122 @@
 <script setup lang="ts">
-import { useVenuesStore } from '~/stores/venues'
-import type { Venue } from '~/types/venue'
+import { useVenuesStore } from "~/stores/venues";
+import type { Venue } from "~/types/venue";
 
 const props = defineProps<{
-  height?: string
-  fullScreen?: boolean
-}>()
+  height?: string;
+  fullScreen?: boolean;
+}>();
 
-const venuesStore = useVenuesStore()
-const { createMap, createMarker, createPinMarkerIcon, fitBounds, isLoading: isMapLoading, error: mapError } = useGoogleMaps()
-const { getCurrentLocation, requestLocationPermission, isLoading: isLocationLoading, error: locationError, permissionDenied } = useLocation()
-const { getUserStoredLocation } = useAuth()
-const { fetchNearbyPlaces, parseAddressComponents, getVenueType, getPlaceDetails, getPhotoUrl } = useGooglePlaces()
-const { createVenuesBatch } = useVenues()
+const venuesStore = useVenuesStore();
+const {
+  createMap,
+  createMarker,
+  createPinMarkerIcon,
+  fitBounds,
+  isLoading: isMapLoading,
+  error: mapError,
+} = useGoogleMaps();
+const {
+  getCurrentLocation,
+  requestLocationPermission,
+  isLoading: isLocationLoading,
+  error: locationError,
+  permissionDenied,
+} = useLocation();
+const { getUserStoredLocation } = useAuth();
+const {
+  fetchNearbyPlaces,
+  parseAddressComponents,
+  getVenueType,
+  getPlaceDetails,
+  getPhotoUrl,
+} = useGooglePlaces();
+const { createVenuesBatch } = useVenues();
 
-const mapContainer = ref<HTMLElement | null>(null)
-const map = ref<google.maps.Map | null>(null)
-const markers = ref<Map<number, google.maps.marker.AdvancedMarkerElement>>(new Map())
-const userMarker = ref<google.maps.marker.AdvancedMarkerElement | null>(null)
-const userLocation = ref<{ latitude: number; longitude: number } | null>(null)
+const mapContainer = ref<HTMLElement | null>(null);
+const map = ref<google.maps.Map | null>(null);
+const markers = ref<Map<number, google.maps.marker.AdvancedMarkerElement>>(
+  new Map(),
+);
+const userMarker = ref<google.maps.marker.AdvancedMarkerElement | null>(null);
+const userLocation = ref<{ latitude: number; longitude: number } | null>(null);
 
-const isInitialized = ref(false)
-const initError = ref<string | null>(null)
-const showPermissionAlert = ref(false)
-const skippedVenuesCount = ref(0)
-const isFetchingPlaces = ref(false)
+const isInitialized = ref(false);
+const initError = ref<string | null>(null);
+const showPermissionAlert = ref(false);
+const skippedVenuesCount = ref(0);
+const isFetchingPlaces = ref(false);
 
 // Search state
-const searchQuery = ref('')
-const isSearching = ref(false)
-const isSearchActive = ref(false)
-let searchDebounceTimer: NodeJS.Timeout | null = null
+const searchQuery = ref("");
+const isSearching = ref(false);
+const isSearchActive = ref(false);
+let searchDebounceTimer: NodeJS.Timeout | null = null;
 
 // Sydney Opera House coordinates as default mock location
 const SYDNEY_OPERA_HOUSE = {
   latitude: -33.8568,
   longitude: 151.2153,
-}
+};
 
 // Default zoom level to show ~10km radius
-const DEFAULT_ZOOM = 15
+const DEFAULT_ZOOM = 15;
 
 const handleSearch = async (query: string) => {
   // Clear existing debounce timer
   if (searchDebounceTimer) {
-    clearTimeout(searchDebounceTimer)
+    clearTimeout(searchDebounceTimer);
   }
 
   // If query is empty, clear search and show nearby venues
   if (!query.trim()) {
-    isSearchActive.value = false
-    searchQuery.value = ''
+    isSearchActive.value = false;
+    searchQuery.value = "";
     if (userLocation.value) {
       await venuesStore.fetchNearbyVenues(
         userLocation.value.latitude,
         userLocation.value.longitude,
-        1000
-      )
+        1000,
+      );
     }
-    return
+    return;
   }
 
   // Debounce search requests (300ms)
   searchDebounceTimer = setTimeout(async () => {
     try {
-      isSearching.value = true
-      const { searchVenues } = useVenues()
+      isSearching.value = true;
+      const { searchVenues } = useVenues();
 
       // Search with AU bias - use current user location if available
       const searchParams = {
         location: query.trim(),
         latitude: userLocation.value?.latitude,
         longitude: userLocation.value?.longitude,
-        radius: 50000, // 50km radius for search
-        limit: 50
-      }
+        radius: 1000, // 50km radius for search
+        limit: 50,
+      };
 
-      const results = await searchVenues(searchParams)
+      const results = await searchVenues(searchParams);
 
       // Update store with search results
-      venuesStore.setNearbyVenues(results)
-      isSearchActive.value = true
+      venuesStore.setNearbyVenues(results);
+      isSearchActive.value = true;
     } catch (error) {
-      console.error('Search failed:', error)
-      isSearchActive.value = false
+      console.error("Search failed:", error);
+      isSearchActive.value = false;
     } finally {
-      isSearching.value = false
+      isSearching.value = false;
     }
-  }, 300)
-}
+  }, 300);
+};
 
 const clearSearch = async () => {
-  searchQuery.value = ''
-  isSearchActive.value = false
+  searchQuery.value = "";
+  isSearchActive.value = false;
 
   if (searchDebounceTimer) {
-    clearTimeout(searchDebounceTimer)
+    clearTimeout(searchDebounceTimer);
   }
 
   // Return to nearby venues
@@ -103,62 +124,64 @@ const clearSearch = async () => {
     await venuesStore.fetchNearbyVenues(
       userLocation.value.latitude,
       userLocation.value.longitude,
-      5000
-    )
+      5000,
+    );
   }
-}
+};
 
 const emit = defineEmits<{
-  venueClick: [venue: Venue]
-  mapReady: []
-}>()
+  venueClick: [venue: Venue];
+  mapReady: [];
+}>();
 
 onMounted(async () => {
-  await initializeMap()
-})
+  await initializeMap();
+});
 
 onBeforeUnmount(() => {
-  clearMarkers()
-})
+  clearMarkers();
+});
 
 /**
  * Fetch nearby places from Google Places API and save them to the backend
  * Uses batch API endpoint for efficient saving of multiple venues at once
  */
-const fetchAndSaveGooglePlaces = async (location: google.maps.LatLngLiteral) => {
+const fetchAndSaveGooglePlaces = async (
+  location: google.maps.LatLngLiteral,
+) => {
   if (!map.value) {
-    console.warn('[VenueMap] Map not initialized, cannot fetch places')
-    return
+    console.warn("[VenueMap] Map not initialized, cannot fetch places");
+    return;
   }
 
   // Prevent multiple simultaneous fetches
   if (isFetchingPlaces.value) {
-    console.log('[VenueMap] Already fetching places, skipping...')
-    return
+    console.log("[VenueMap] Already fetching places, skipping...");
+    return;
   }
 
   try {
-    isFetchingPlaces.value = true
-    console.log('[VenueMap] Fetching nearby places from Google Places API...')
+    isFetchingPlaces.value = true;
+    console.log("[VenueMap] Fetching nearby places from Google Places API...");
 
     // Fetch nearby places from Google (radius: 5km)
-    const places = await fetchNearbyPlaces(map.value, location, 5000)
+    const places = await fetchNearbyPlaces(map.value, location, 5000);
 
-    console.log(`[VenueMap] Found ${places.length} places from Google`)
+    console.log(`[VenueMap] Found ${places.length} places from Google`);
 
     if (places.length === 0) {
-      console.log('[VenueMap] No places found, skipping batch save')
-      return
+      console.log("[VenueMap] No places found, skipping batch save");
+      return;
     }
 
     // Transform all places into venue data for batch saving
-    const venuesData = places.map(place => {
-      const addressInfo = parseAddressComponents(place.addressComponents)
+    const venuesData = places.map((place) => {
+      const addressInfo = parseAddressComponents(place.addressComponents);
 
       return {
-        name: place.displayName || 'Unknown Place',
+        name: place.displayName || "Unknown Place",
         venue_type: getVenueType(place.types),
-        address: addressInfo.street || place.formattedAddress || '',
+        address: addressInfo.street || place.formattedAddress || "",
         city: addressInfo.city,
         state: addressInfo.state,
         country: addressInfo.country,
@@ -170,280 +193,300 @@ const fetchAndSaveGooglePlaces = async (location: google.maps.LatLngLiteral) => 
         website: place.websiteURI,
         rating: place.rating,
         price_level: place.priceLevel ? parseInt(place.priceLevel) : undefined,
-        photos: place.photos?.slice(0, 5).map(photo =>
-          getPhotoUrl(photo, 800)
-        ) || [],
-      }
-    })
+        photos:
+          place.photos?.slice(0, 5).map((photo) => getPhotoUrl(photo, 800)) ||
+          [],
+      };
+    });
 
     // Batch save all venues in a single API call
     const savedVenues = await createVenuesBatch(venuesData, {
       skip_duplicates: true,
-      update_existing: false
-    })
+      update_existing: false,
+    });
 
-    console.log(`[VenueMap] Batch API returned ${savedVenues.length} venues`)
+    console.log(`[VenueMap] Batch API returned ${savedVenues.length} venues`);
 
     // If batch save returned no venues (all were duplicates), fetch from backend search endpoint
     if (savedVenues.length === 0) {
-      console.log('[VenueMap] No venues returned from batch (likely all duplicates), fetching from search endpoint')
-      await venuesStore.fetchNearbyVenues(
-        location.lat,
-        location.lng,
-        5000
-      )
+      console.log(
+        "[VenueMap] No venues returned from batch (likely all duplicates), fetching from search endpoint",
+      );
+      await venuesStore.fetchNearbyVenues(location.lat, location.lng, 100);
     } else {
       // Update the venues store with the saved venues
-      venuesStore.setNearbyVenues(savedVenues)
+      venuesStore.setNearbyVenues(savedVenues);
     }
-
   } catch (error) {
-    console.error('[VenueMap] Failed to fetch and save Google Places:', error)
+    console.error("[VenueMap] Failed to fetch and save Google Places:", error);
     // Fallback to fetching from backend if Google Places fails
-    await venuesStore.fetchNearbyVenues(
-      location.lat,
-      location.lng,
-      5000
-    )
+    await venuesStore.fetchNearbyVenues(location.lat, location.lng, 100);
   } finally {
-    isFetchingPlaces.value = false
+    isFetchingPlaces.value = false;
   }
-}
+};
 
 const initializeMap = async () => {
   try {
     if (!mapContainer.value) {
-      throw new Error('Map container not found')
+      throw new Error("Map container not found");
     }
 
     // Step 1: Request browser geolocation (required)
-    console.log('Requesting browser geolocation...')
-    const browserLocation = await requestBrowserLocation()
+    console.log("Requesting browser geolocation...");
+    const browserLocation = await requestBrowserLocation();
 
     if (!browserLocation) {
-      throw new Error('Location access required to use the app. Please enable GPS in your browser settings.')
+      throw new Error(
+        "Location access required to use the app. Please enable GPS in your browser settings.",
+      );
     }
 
-    userLocation.value = browserLocation
-    console.log('Using browser geolocation:', userLocation.value)
+    userLocation.value = browserLocation;
+    console.log("Using browser geolocation:", userLocation.value);
 
     // Create map centered on user location with appropriate zoom
     const center = {
       lat: userLocation.value.latitude,
-      lng: userLocation.value.longitude
-    }
+      lng: userLocation.value.longitude,
+    };
 
     map.value = await createMap(mapContainer.value, {
       center,
       zoom: DEFAULT_ZOOM,
-      mapId: 'VENUE_MAP',
-    })
+      mapId: "VENUE_MAP",
+    });
 
     if (!map.value) {
-      throw new Error('Failed to create map')
+      throw new Error("Failed to create map");
     }
 
     // Add user location marker
-    await addUserLocationMarker(center)
+    await addUserLocationMarker(center);
 
     // Fetch nearby places from Google Places API and save to backend
-    await fetchAndSaveGooglePlaces(center)
+    await fetchAndSaveGooglePlaces(center);
 
     // Add venue markers
-    await updateVenueMarkers()
+    await updateVenueMarkers();
 
     // Check if user has an active check-in
-    await venuesStore.fetchCurrentCheckIn()
+    await venuesStore.fetchCurrentCheckIn();
 
     // Add bounds change listener to fetch venues when panning/zooming
     // This will update markers without re-centering the map view
-    setupBoundsListener()
+    setupBoundsListener();
 
-    isInitialized.value = true
-    emit('mapReady')
+    isInitialized.value = true;
+    emit("mapReady");
   } catch (err) {
-    console.error('Failed to initialize map:', err)
-    initError.value = err instanceof Error ? err.message : 'Failed to initialize map'
+    console.error("Failed to initialize map:", err);
+    initError.value =
+      err instanceof Error ? err.message : "Failed to initialize map";
   }
-}
+};
 
 const requestBrowserLocation = async () => {
   // Request browser geolocation (required for the app)
   try {
-    const { requestLocationPermission, getCurrentLocation } = useLocation()
-    const hasPermission = await requestLocationPermission()
+    const { requestLocationPermission, getCurrentLocation } = useLocation();
+    const hasPermission = await requestLocationPermission();
 
     if (!hasPermission) {
-      throw new Error('Location permission denied')
+      throw new Error("Location permission denied");
     }
 
-    const browserLocation = await getCurrentLocation()
+    const browserLocation = await getCurrentLocation();
     if (!browserLocation) {
-      throw new Error('Could not get location')
+      throw new Error("Could not get location");
     }
 
     return {
       latitude: browserLocation.latitude,
-      longitude: browserLocation.longitude
-    }
+      longitude: browserLocation.longitude,
+    };
   } catch (error) {
-    console.error('Browser location request failed:', error)
-    throw error
+    console.error("Browser location request failed:", error);
+    throw error;
   }
-}
+};
 
 const setupBoundsListener = () => {
-  if (!map.value) return
+  if (!map.value) return;
 
   // Debounce function to limit API calls
-  let boundsChangeTimeout: NodeJS.Timeout | null = null
-  let isFirstBoundsChange = true
+  let boundsChangeTimeout: NodeJS.Timeout | null = null;
+  let isFirstBoundsChange = true;
 
-  map.value.addListener('bounds_changed', () => {
+  map.value.addListener("bounds_changed", () => {
     // Skip the first bounds_changed event (triggered on map creation)
     if (isFirstBoundsChange) {
-      isFirstBoundsChange = false
-      return
+      isFirstBoundsChange = false;
+      return;
     }
 
     if (boundsChangeTimeout) {
-      clearTimeout(boundsChangeTimeout)
+      clearTimeout(boundsChangeTimeout);
     }
 
     boundsChangeTimeout = setTimeout(async () => {
-      const bounds = map.value?.getBounds()
-      if (!bounds) return
+      const bounds = map.value?.getBounds();
+      if (!bounds) return;
 
-      const centerPoint = bounds.getCenter()
+      const centerPoint = bounds.getCenter();
       const center = {
         lat: centerPoint.lat(),
-        lng: centerPoint.lng()
-      }
+        lng: centerPoint.lng(),
+      };
 
-      console.log('[VenueMap] Map panned, fetching Google Places for new location...')
+      console.log(
+        "[VenueMap] Map panned, fetching Google Places for new location...",
+      );
 
       // Fetch and save Google Places for the new map center
       // This runs in the background and updates markers automatically
-      await fetchAndSaveGooglePlaces(center)
-    }, 1000) // Debounce by 1 second to avoid excessive API calls
-  })
-}
+      await fetchAndSaveGooglePlaces(center);
+    }, 1000); // Debounce by 1 second to avoid excessive API calls
+  });
+};
 
 /**
  * Helper function to extract coordinates from venue
  * Handles both flat (latitude, longitude) and nested (location.latitude, location.longitude) formats
  */
-const getVenueCoordinates = (venue: Venue): { lat: number; lng: number } | null => {
+const getVenueCoordinates = (
+  venue: Venue,
+): { lat: number; lng: number } | null => {
   // Check for nested location object first (new format)
-  if (venue.location?.latitude !== undefined && venue.location?.longitude !== undefined) {
-    const lat = typeof venue.location.latitude === 'string'
-      ? parseFloat(venue.location.latitude)
-      : venue.location.latitude
-    const lng = typeof venue.location.longitude === 'string'
-      ? parseFloat(venue.location.longitude)
-      : venue.location.longitude
+  if (
+    venue.location?.latitude !== undefined &&
+    venue.location?.longitude !== undefined
+  ) {
+    const lat =
+      typeof venue.location.latitude === "string"
+        ? parseFloat(venue.location.latitude)
+        : venue.location.latitude;
+    const lng =
+      typeof venue.location.longitude === "string"
+        ? parseFloat(venue.location.longitude)
+        : venue.location.longitude;
 
     if (isValidCoordinates(lat, lng)) {
-      return { lat, lng }
+      return { lat, lng };
     }
   }
 
   // Fallback to flat coordinates (legacy format)
   if (venue.latitude !== undefined && venue.longitude !== undefined) {
-    const lat = typeof venue.latitude === 'string' ? parseFloat(venue.latitude) : venue.latitude
-    const lng = typeof venue.longitude === 'string' ? parseFloat(venue.longitude) : venue.longitude
+    const lat =
+      typeof venue.latitude === "string"
+        ? parseFloat(venue.latitude)
+        : venue.latitude;
+    const lng =
+      typeof venue.longitude === "string"
+        ? parseFloat(venue.longitude)
+        : venue.longitude;
 
     if (isValidCoordinates(lat, lng)) {
-      return { lat, lng }
+      return { lat, lng };
     }
   }
 
-  return null
-}
+  return null;
+};
 
 const addUserLocationMarker = async (position: google.maps.LatLngLiteral) => {
-  if (!map.value) return
+  if (!map.value) return;
 
   userMarker.value = await createMarker(map.value, position, {
-    title: 'Your Location',
+    title: "Your Location",
     content: createUserLocationMarkerContent(),
-    zIndex: 9000
-  })
-}
-
+    zIndex: 9000,
+  });
+};
 
 const updateVenueMarkers = async (shouldFitBounds: boolean = true) => {
   if (!map.value) {
-    console.warn('[VenueMap] Map not initialized, cannot update markers')
-    return
+    console.warn("[VenueMap] Map not initialized, cannot update markers");
+    return;
   }
 
   // Clear existing markers
-  clearMarkers()
+  clearMarkers();
 
   // Reset skipped venues count
-  skippedVenuesCount.value = 0
+  skippedVenuesCount.value = 0;
 
-  const bounds = new google.maps.LatLngBounds()
+  const bounds = new google.maps.LatLngBounds();
 
   // Add user location to bounds if available
   if (userLocation.value) {
     bounds.extend({
       lat: userLocation.value.latitude,
-      lng: userLocation.value.longitude
-    })
+      lng: userLocation.value.longitude,
+    });
   }
 
   // Track skipped venues for debugging
-  const skippedVenues: { id: number; name: string; latitude: unknown; longitude: unknown; reason: string }[] = []
+  const skippedVenues: {
+    id: number;
+    name: string;
+    latitude: unknown;
+    longitude: unknown;
+    reason: string;
+  }[] = [];
 
   // Log venue count for debugging
-  console.log(`[VenueMap] Processing ${venuesStore.venues.length} venues for markers`)
+  console.log(
+    `[VenueMap] Processing ${venuesStore.venues.length} venues for markers`,
+  );
 
   // Create markers for all venues
   for (const venue of venuesStore.venues) {
     // Extract coordinates using helper function (handles both formats)
-    const coordinates = getVenueCoordinates(venue)
+    const coordinates = getVenueCoordinates(venue);
 
     if (!coordinates) {
-      console.warn(
-        `[VenueMap] Skipping venue with invalid coordinates:`,
-        {
-          id: venue.id,
-          name: venue.name,
-          latitude: venue?.location?.latitude,
-          longitude: venue?.location?.longitude,
-          location: venue.location
-        }
-      )
+      console.warn(`[VenueMap] Skipping venue with invalid coordinates:`, {
+        id: venue.id,
+        name: venue.name,
+        latitude: venue?.location?.latitude,
+        longitude: venue?.location?.longitude,
+        location: venue.location,
+      });
       skippedVenues.push({
         id: venue.id,
         name: venue.name,
         latitude: venue.latitude || venue.location?.latitude,
         longitude: venue.longitude || venue.location?.longitude,
-        reason: 'invalid_coordinates'
-      })
-      continue
+        reason: "invalid_coordinates",
+      });
+      continue;
     }
 
-    const position = coordinates
+    const position = coordinates;
 
     // Check if venue has active users
-    const activeUserCount = (venue as any).active_user_count || 0
-    const hasActiveUsers = activeUserCount > 0
+    const activeUserCount = (venue as any).active_user_count || 0;
+    const hasActiveUsers = activeUserCount > 0;
 
     // Calculate distance from user location
     const distance = userLocation.value
-      ? calculateDistance(userLocation.value.latitude, userLocation.value.longitude, coordinates.lat, coordinates.lng)
-      : 0
+      ? calculateDistance(
+          userLocation.value.latitude,
+          userLocation.value.longitude,
+          coordinates.lat,
+          coordinates.lng,
+        )
+      : 0;
 
     try {
       const contentEL = createMarkerContent(
         venue,
         hasActiveUsers,
         activeUserCount,
-        distance
-      )
+        distance,
+      );
 
       //const pin = await createPinMarkerIcon({
       //  background: '#1A73E8',
@@ -455,83 +498,98 @@ const updateVenueMarkers = async (shouldFitBounds: boolean = true) => {
         title: venue.name,
         content: contentEL,
         //content: pin.element,
-
-      })
+      });
 
       if (marker) {
         // Add click listener
-        marker.addListener('click', () => {
-          handleMarkerClick(venue)
-        })
-
-        marker.addListener('gmp-click', () => {
-          console.log("Advanced marker clicked");
-          handleMarkerClick(venue)
+        marker.addListener("click", () => {
+          handleMarkerClick(venue);
         });
 
-        markers.value.set(venue.id, marker)
-        bounds.extend(position)
-        marker.setMap(map.value)
+        marker.addListener("gmp-click", () => {
+          console.log("Advanced marker clicked");
+          handleMarkerClick(venue);
+        });
+
+        markers.value.set(venue.id, marker);
+        bounds.extend(position);
+        marker.setMap(map.value);
       } else {
-        console.warn(`[VenueMap] Failed to create marker for venue: ${venue.name} (ID: ${venue.id})`)
+        console.warn(
+          `[VenueMap] Failed to create marker for venue: ${venue.name} (ID: ${venue.id})`,
+        );
         skippedVenues.push({
           id: venue.id,
           name: venue.name,
           latitude: coordinates.lat,
           longitude: coordinates.lng,
-          reason: 'marker_creation_failed'
-        })
+          reason: "marker_creation_failed",
+        });
       }
     } catch (err) {
-      console.error(`[VenueMap] Error creating marker for venue ${venue.name}:`, err)
+      console.error(
+        `[VenueMap] Error creating marker for venue ${venue.name}:`,
+        err,
+      );
       skippedVenues.push({
         id: venue.id,
         name: venue.name,
         latitude: coordinates.lat,
         longitude: coordinates.lng,
-        reason: 'marker_creation_error'
-      })
+        reason: "marker_creation_error",
+      });
     }
   }
 
   // Update skipped venues count for UI feedback
-  skippedVenuesCount.value = skippedVenues.length
+  skippedVenuesCount.value = skippedVenues.length;
 
   // Log summary
-  const successCount = markers.value.size
-  console.log(`[VenueMap] Created ${successCount} markers, skipped ${skippedVenues.length} venues`)
+  const successCount = markers.value.size;
+  console.log(
+    `[VenueMap] Created ${successCount} markers, skipped ${skippedVenues.length} venues`,
+  );
 
   if (skippedVenues.length > 0) {
     console.warn(
       `[VenueMap] Skipped venue details:`,
-      skippedVenues.map(v => `${v.name} (ID: ${v.id}, reason: ${v.reason})`).join(', ')
-    )
+      skippedVenues
+        .map((v) => `${v.name} (ID: ${v.id}, reason: ${v.reason})`)
+        .join(", "),
+    );
   }
 
   // Fit map to show all markers (only on initial load, not on pan)
   if (shouldFitBounds && markers.value.size > 0) {
-    console.log('Fit map to show all markers')
-    fitBounds(map.value, bounds)
+    console.log("Fit map to show all markers");
+    fitBounds(map.value, bounds);
   }
-}
+};
 
-const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-  const R = 6371 // Earth's radius in km
-  const dLat = toRad(lat2 - lat1)
-  const dLon = toRad(lon2 - lon1)
+const calculateDistance = (
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number => {
+  const R = 6371; // Earth's radius in km
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
 
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2)
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  return R * c
-}
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
 
 const toRad = (value: number): number => {
-  return (value * Math.PI) / 180
-}
+  return (value * Math.PI) / 180;
+};
 
 /**
  * Validates that coordinates are valid numbers within acceptable ranges
@@ -541,35 +599,40 @@ const toRad = (value: number): number => {
  */
 const isValidCoordinates = (lat: unknown, lng: unknown): boolean => {
   // Check if values are numbers and not NaN
-  if (typeof lat !== 'number' || typeof lng !== 'number') {
-    return false
+  if (typeof lat !== "number" || typeof lng !== "number") {
+    return false;
   }
   if (Number.isNaN(lat) || Number.isNaN(lng)) {
-    return false
+    return false;
   }
   // Validate latitude range (-90 to 90) and longitude range (-180 to 180)
   if (lat < -90 || lat > 90) {
-    return false
+    return false;
   }
   if (lng < -180 || lng > 180) {
-    return false
+    return false;
   }
-  return true
-}
+  return true;
+};
 
 const formatDistance = (km: number): string => {
   if (km < 1) {
-    return `${Math.round(km * 1000)}m`
+    return `${Math.round(km * 1000)}m`;
   }
-  return `${km.toFixed(1)}km`
-}
+  return `${km.toFixed(1)}km`;
+};
 
-const createMarkerContent = (venue: Venue, isActive: boolean, userCount: number = 0, distance: number = 0) => {
-  const wrapper = document.createElement('div')
-  wrapper.className = `people-pin ${isActive ? 'active' : ''}`
+const createMarkerContent = (
+  venue: Venue,
+  isActive: boolean,
+  userCount: number = 0,
+  distance: number = 0,
+) => {
+  const wrapper = document.createElement("div");
+  wrapper.className = `people-pin ${isActive ? "active" : ""}`;
 
-  const bgColor = isActive ? '#0050FF' : '#E5E7EB'
-  const fgColor = isActive ? '#FFFFFF' : '#374151'
+  const bgColor = isActive ? "#0050FF" : "#E5E7EB";
+  const fgColor = isActive ? "#FFFFFF" : "#374151";
 
   wrapper.innerHTML = `
     <svg width="72" height="44" viewBox="0 0 72 44" xmlns="http://www.w3.org/2000/svg">
@@ -598,94 +661,97 @@ const createMarkerContent = (venue: Venue, isActive: boolean, userCount: number 
         ${userCount}
       </text>
     </svg>
-  `
+  `;
 
   // Hover scale (optional but nice)
-  wrapper.style.cursor = 'pointer'
-  wrapper.style.transition = 'transform 0.15s ease'
-  wrapper.addEventListener('mouseenter', () => {
-    wrapper.style.transform = 'scale(1.1)'
-  })
-  wrapper.addEventListener('mouseleave', () => {
-    wrapper.style.transform = 'scale(1)'
-  })
+  wrapper.style.cursor = "pointer";
+  wrapper.style.transition = "transform 0.15s ease";
+  wrapper.addEventListener("mouseenter", () => {
+    wrapper.style.transform = "scale(1.1)";
+  });
+  wrapper.addEventListener("mouseleave", () => {
+    wrapper.style.transform = "scale(1)";
+  });
 
-  return wrapper
-}
+  return wrapper;
+};
 
 const createUserLocationMarkerContent = () => {
   // Create a marker for user location (green/cyan dot)
-  const div = document.createElement('div')
-  div.className = 'user-location-marker'
+  const div = document.createElement("div");
+  div.className = "user-location-marker";
 
   div.innerHTML = `
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <circle cx="12" cy="12" r="8" fill="#00D9FF" stroke="white" stroke-width="2"/>
       <circle cx="12" cy="12" r="4" fill="white"/>
     </svg>
-  `
+  `;
 
-  return div
-}
+  return div;
+};
 
 const handleMarkerClick = async (venue: Venue) => {
-  console.log('Venue marker clicked:', venue.name)
-  venuesStore.setSelectedVenue(venue)
+  console.log("Venue marker clicked:", venue.name);
+  venuesStore.setSelectedVenue(venue);
 
   // Fetch users at this venue
-  const activeUserCount = (venue as any).active_user_count || 0
+  const activeUserCount = (venue as any).active_user_count || 0;
   if (activeUserCount > 0) {
     try {
-      await venuesStore.fetchNearbyUsers(venue.id)
+      await venuesStore.fetchNearbyUsers(venue.id);
     } catch (error) {
-      console.error('Failed to fetch users at venue:', error)
+      console.error("Failed to fetch users at venue:", error);
     }
   } else {
     // Clear users if no one is checked in
-    venuesStore.clearVenueUsers()
+    venuesStore.clearVenueUsers();
   }
 
-  emit('venueClick', venue)
+  emit("venueClick", venue);
 
   // Optionally pan to venue
   if (map.value) {
-    const coordinates = getVenueCoordinates(venue)
+    const coordinates = getVenueCoordinates(venue);
     if (coordinates) {
-      map.value.panTo(coordinates)
+      map.value.panTo(coordinates);
     }
   }
-}
+};
 
 const clearMarkers = () => {
-  markers.value.forEach(marker => {
-    marker.map = null
-  })
-  markers.value.clear()
-}
+  markers.value.forEach((marker) => {
+    marker.map = null;
+  });
+  markers.value.clear();
+};
 
 const refreshVenues = async () => {
-  if (!userLocation.value) return
+  if (!userLocation.value) return;
 
   await venuesStore.fetchNearbyVenues(
     userLocation.value.latitude,
     userLocation.value.longitude,
-    5000
-  )
+    5000,
+  );
 
-  await updateVenueMarkers()
-}
+  await updateVenueMarkers();
+};
 
 // Watch for venue changes
 // Note: Only fit bounds on initial load, not when updating markers from panning
-watch(() => venuesStore.venues, async () => {
-  await updateVenueMarkers(false)
-}, { deep: true })
+watch(
+  () => venuesStore.venues,
+  async () => {
+    await updateVenueMarkers(false);
+  },
+  { deep: true },
+);
 
 // Expose refresh method
 defineExpose({
-  refreshVenues
-})
-
+  refreshVenues,
+});
 </script>
 
 <template>
@@ -695,7 +761,9 @@ defineExpose({
     :class="{ 'fixed inset-0 z-10': fullScreen }"
   >
     <!-- Search Bar -->
-    <div class="absolute top-4 left-4 right-4 z-20 md:left-auto md:right-auto md:w-80">
+    <div
+      class="absolute top-4 left-4 right-4 z-20 md:left-auto md:right-auto md:w-80"
+    >
       <div class="relative flex items-center">
         <input
           v-model="searchQuery"
@@ -725,7 +793,12 @@ defineExpose({
           class="absolute right-3 text-gray-400 hover:text-gray-600 transition-colors"
           title="Clear search"
         >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            class="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -736,19 +809,35 @@ defineExpose({
         </button>
 
         <!-- Loading spinner -->
-        <div
-          v-if="isSearching"
-          class="absolute right-3"
-        >
-          <svg class="animate-spin w-5 h-5 text-primary-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        <div v-if="isSearching" class="absolute right-3">
+          <svg
+            class="animate-spin w-5 h-5 text-primary-500"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            ></circle>
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            ></path>
           </svg>
         </div>
       </div>
 
       <!-- Search status indicator -->
-      <div v-if="isSearchActive && searchQuery" class="mt-2 text-xs text-gray-600 px-1">
+      <div
+        v-if="isSearchActive && searchQuery"
+        class="mt-2 text-xs text-gray-600 px-1"
+      >
         Showing search results for "{{ searchQuery }}"
       </div>
     </div>
@@ -768,9 +857,25 @@ defineExpose({
     >
       <div class="text-center">
         <div class="w-16 h-16 mx-auto mb-4">
-          <svg class="animate-spin h-16 w-16 text-primary-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          <svg
+            class="animate-spin h-16 w-16 text-primary-600"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            ></circle>
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            ></path>
           </svg>
         </div>
         <p class="text-gray-600 font-medium">Loading map...</p>
@@ -784,28 +889,40 @@ defineExpose({
       :class="fullScreen ? '' : 'rounded-xl'"
     >
       <div class="text-center px-6 max-w-sm">
-        <div class="w-16 h-16 mx-auto mb-4 bg-blue-100 rounded-full flex items-center justify-center">
-          <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+        <div
+          class="w-16 h-16 mx-auto mb-4 bg-blue-100 rounded-full flex items-center justify-center"
+        >
+          <svg
+            class="w-8 h-8 text-blue-600"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+            />
           </svg>
         </div>
-        <h3 class="text-lg font-semibold text-gray-900 mb-2">Showing Sydney Venues</h3>
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">
+          Showing Sydney Venues
+        </h3>
         <p class="text-sm text-gray-600 mb-2">
           Currently showing venues around Sydney Opera House (10km radius).
         </p>
         <p class="text-xs text-gray-500 mb-4">
-          To see venues near your actual location, enable location access in your browser settings.
+          To see venues near your actual location, enable location access in
+          your browser settings.
         </p>
         <div class="space-y-2">
-          <UiButton
-            @click="showPermissionAlert = false"
-            size="sm"
-            fullWidth
-          >
+          <UiButton @click="showPermissionAlert = false" size="sm" fullWidth>
             Explore Sydney Venues
           </UiButton>
           <p class="text-xs text-gray-500 mt-3">
-            💡 <strong>Tip:</strong> Users with stored location in their profile will see personalized venues automatically.
+            💡 <strong>Tip:</strong> Users with stored location in their profile
+            will see personalized venues automatically.
           </p>
         </div>
       </div>
@@ -818,18 +935,30 @@ defineExpose({
       :class="fullScreen ? '' : 'rounded-xl'"
     >
       <div class="text-center px-6">
-        <div class="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-          <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        <div
+          class="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center"
+        >
+          <svg
+            class="w-8 h-8 text-red-600"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+            />
           </svg>
         </div>
-        <h3 class="text-lg font-semibold text-gray-900 mb-2">Unable to Load Map</h3>
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">
+          Unable to Load Map
+        </h3>
         <p class="text-sm text-gray-600 mb-4">
           {{ initError || mapError }}
         </p>
-        <UiButton @click="initializeMap" size="sm">
-          Try Again
-        </UiButton>
+        <UiButton @click="initializeMap" size="sm"> Try Again </UiButton>
       </div>
     </div>
 
@@ -841,8 +970,21 @@ defineExpose({
         class="bg-white p-3 rounded-lg shadow-lg hover:shadow-xl transition-shadow disabled:opacity-50"
         title="Refresh venues"
       >
-        <svg class="w-5 h-5 text-gray-700" :class="{ 'animate-spin': venuesStore.isLoadingVenues || isFetchingPlaces }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        <svg
+          class="w-5 h-5 text-gray-700"
+          :class="{
+            'animate-spin': venuesStore.isLoadingVenues || isFetchingPlaces,
+          }"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+          />
         </svg>
       </button>
 
@@ -852,11 +994,28 @@ defineExpose({
         class="bg-white px-3 py-2 rounded-lg shadow-lg animate-pulse"
       >
         <div class="flex items-center gap-2">
-          <svg class="animate-spin w-4 h-4 text-primary-500" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          <svg
+            class="animate-spin w-4 h-4 text-primary-500"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            ></circle>
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            ></path>
           </svg>
-          <span class="text-xs font-medium text-gray-600">Finding places...</span>
+          <span class="text-xs font-medium text-gray-600"
+            >Finding places...</span
+          >
         </div>
       </div>
     </div>
@@ -888,12 +1047,25 @@ defineExpose({
       :class="fullScreen ? 'bottom-20 sm:bottom-24' : 'bottom-4'"
     >
       <div class="flex items-start gap-2">
-        <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        <svg
+          class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+          />
         </svg>
         <div>
           <p class="text-sm font-medium text-amber-800">
-            {{ skippedVenuesCount }} venue{{ skippedVenuesCount > 1 ? 's' : '' }} could not be displayed
+            {{ skippedVenuesCount }} venue{{
+              skippedVenuesCount > 1 ? "s" : ""
+            }}
+            could not be displayed
           </p>
           <p class="text-xs text-amber-600 mt-0.5">
             Some venues have missing location data
@@ -912,10 +1084,10 @@ defineExpose({
 
 .people-pin svg {
   overflow: visible;
-  filter: drop-shadow(0px 4px 10px rgba(0,0,0,0.15));
+  filter: drop-shadow(0px 4px 10px rgba(0, 0, 0, 0.15));
 }
 
 .people-pin.active svg {
-  filter: drop-shadow(0px 6px 14px rgba(0,80,255,0.35));
+  filter: drop-shadow(0px 6px 14px rgba(0, 80, 255, 0.35));
 }
 </style>
