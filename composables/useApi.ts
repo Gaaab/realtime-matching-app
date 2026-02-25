@@ -1,90 +1,102 @@
-import type { ApiResponse, ApiError } from '~/types/api'
+import type { ApiResponse, ApiError } from "~/types/api";
 
 interface FetchOptions extends RequestInit {
-  params?: Record<string, any>
+  params?: Record<string, any>;
 }
 
 export const useApi = () => {
-  const config = useRuntimeConfig()
-  const baseURL = config.public.apiBase
+  const config = useRuntimeConfig();
+  const baseURL = config.public.apiBase;
 
   const getAuthToken = (): string | null => {
     if (process.client) {
-      return localStorage.getItem('auth_token')
+      return localStorage.getItem("auth_token");
     }
-    return null
-  }
+    return null;
+  };
 
   const setAuthToken = (token: string) => {
     if (process.client) {
-      localStorage.setItem('auth_token', token)
+      localStorage.setItem("auth_token", token);
     }
-  }
+  };
 
   const removeAuthToken = () => {
     if (process.client) {
-      localStorage.removeItem('auth_token')
+      localStorage.removeItem("auth_token");
     }
-  }
+  };
 
   const buildUrl = (endpoint: string, params?: Record<string, any>): string => {
-    const url = new URL(`${baseURL}${endpoint}`)
+    const url = new URL(`${baseURL}${endpoint}`);
     if (params) {
-      Object.keys(params).forEach(key => {
+      Object.keys(params).forEach((key) => {
         if (params[key] !== undefined && params[key] !== null) {
-          url.searchParams.append(key, String(params[key]))
+          url.searchParams.append(key, String(params[key]));
         }
-      })
+      });
     }
-    return url.toString()
-  }
+    return url.toString();
+  };
 
   const getHeaders = (includeAuth: boolean = true): HeadersInit => {
     const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    }
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
 
     if (includeAuth) {
-      const token = getAuthToken()
+      const token = getAuthToken();
       if (token) {
-        headers['Authorization'] = `Bearer ${token}`
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      // Inject location headers on authenticated requests
+      if (process.client) {
+        const { getSharedLocation } = useLocation();
+        const location = getSharedLocation();
+        if (location) {
+          headers["X-Latitude"] = String(location.latitude);
+          headers["X-Longitude"] = String(location.longitude);
+        }
       }
     }
 
-    return headers
-  }
+    return headers;
+  };
 
-  const handleResponse = async <T>(response: Response): Promise<ApiResponse<T>> => {
-    const contentType = response.headers.get('content-type')
+  const handleResponse = async <T>(
+    response: Response,
+  ): Promise<ApiResponse<T>> => {
+    const contentType = response.headers.get("content-type");
 
-    if (!contentType || !contentType.includes('application/json')) {
-      throw new Error('Invalid response format')
+    if (!contentType || !contentType.includes("application/json")) {
+      throw new Error("Invalid response format");
     }
 
-    const data = await response.json()
+    const data = await response.json();
 
     if (!response.ok) {
       const error: ApiError = {
         success: false,
         http_status: response.status,
-        message: data.message || 'An error occurred',
+        message: data.message || "An error occurred",
         errors: data.errors,
-      }
-      throw error
+      };
+      throw error;
     }
 
-    return data as ApiResponse<T>
-  }
+    return data as ApiResponse<T>;
+  };
 
   const request = async <T>(
     endpoint: string,
     options: FetchOptions = {},
-    includeAuth: boolean = true
+    includeAuth: boolean = true,
   ): Promise<ApiResponse<T>> => {
     try {
-      const { params, ...fetchOptions } = options
-      const url = buildUrl(endpoint, params)
+      const { params, ...fetchOptions } = options;
+      const url = buildUrl(endpoint, params);
 
       const response = await fetch(url, {
         ...fetchOptions,
@@ -92,104 +104,121 @@ export const useApi = () => {
           ...getHeaders(includeAuth),
           ...fetchOptions.headers,
         },
-      })
+      });
 
-      return await handleResponse<T>(response)
+      return await handleResponse<T>(response);
     } catch (error) {
-      if (error && typeof error === 'object' && 'http_status' in error) {
-        throw error
+      if (error && typeof error === "object" && "http_status" in error) {
+        throw error;
       }
       throw {
         success: false,
         http_status: 0,
-        message: error instanceof Error ? error.message : 'Network error occurred',
-      } as ApiError
+        message:
+          error instanceof Error ? error.message : "Network error occurred",
+      } as ApiError;
     }
-  }
+  };
 
-  const get = <T>(endpoint: string, params?: Record<string, any>, includeAuth: boolean = true) => {
-    return request<T>(endpoint, { method: 'GET', params }, includeAuth)
-  }
+  const get = <T>(
+    endpoint: string,
+    params?: Record<string, any>,
+    includeAuth: boolean = true,
+  ) => {
+    return request<T>(endpoint, { method: "GET", params }, includeAuth);
+  };
 
-  const post = <T>(endpoint: string, body?: any, includeAuth: boolean = true) => {
+  const post = <T>(
+    endpoint: string,
+    body?: any,
+    includeAuth: boolean = true,
+  ) => {
     return request<T>(
       endpoint,
       {
-        method: 'POST',
+        method: "POST",
         body: body ? JSON.stringify(body) : undefined,
       },
-      includeAuth
-    )
-  }
+      includeAuth,
+    );
+  };
 
-  const put = <T>(endpoint: string, body?: any, includeAuth: boolean = true) => {
+  const put = <T>(
+    endpoint: string,
+    body?: any,
+    includeAuth: boolean = true,
+  ) => {
     return request<T>(
       endpoint,
       {
-        method: 'PUT',
+        method: "PUT",
         body: body ? JSON.stringify(body) : undefined,
       },
-      includeAuth
-    )
-  }
+      includeAuth,
+    );
+  };
 
-  const patch = <T>(endpoint: string, body?: any, includeAuth: boolean = true) => {
+  const patch = <T>(
+    endpoint: string,
+    body?: any,
+    includeAuth: boolean = true,
+  ) => {
     return request<T>(
       endpoint,
       {
-        method: 'PATCH',
+        method: "PATCH",
         body: body ? JSON.stringify(body) : undefined,
       },
-      includeAuth
-    )
-  }
+      includeAuth,
+    );
+  };
 
   const del = <T>(endpoint: string, includeAuth: boolean = true) => {
-    return request<T>(endpoint, { method: 'DELETE' }, includeAuth)
-  }
+    return request<T>(endpoint, { method: "DELETE" }, includeAuth);
+  };
 
   const uploadFile = async <T>(
     endpoint: string,
     file: File,
-    additionalData?: Record<string, any>
+    additionalData?: Record<string, any>,
   ): Promise<ApiResponse<T>> => {
-    const formData = new FormData()
-    formData.append('file', file)
+    const formData = new FormData();
+    formData.append("file", file);
 
     if (additionalData) {
-      Object.keys(additionalData).forEach(key => {
-        formData.append(key, String(additionalData[key]))
-      })
+      Object.keys(additionalData).forEach((key) => {
+        formData.append(key, String(additionalData[key]));
+      });
     }
 
     try {
-      const token = getAuthToken()
+      const token = getAuthToken();
       const headers: HeadersInit = {
-        'Accept': 'application/json',
-      }
+        Accept: "application/json",
+      };
 
       if (token) {
-        headers['Authorization'] = `Bearer ${token}`
+        headers["Authorization"] = `Bearer ${token}`;
       }
 
       const response = await fetch(`${baseURL}${endpoint}`, {
-        method: 'POST',
+        method: "POST",
         headers,
         body: formData,
-      })
+      });
 
-      return await handleResponse<T>(response)
+      return await handleResponse<T>(response);
     } catch (error) {
-      if (error && typeof error === 'object' && 'http_status' in error) {
-        throw error
+      if (error && typeof error === "object" && "http_status" in error) {
+        throw error;
       }
       throw {
         success: false,
         http_status: 0,
-        message: error instanceof Error ? error.message : 'Upload failed',
-      } as ApiError
+        message: error instanceof Error ? error.message : "Upload failed",
+      } as ApiError;
     }
-  }
+  };
 
   return {
     get,
@@ -201,5 +230,5 @@ export const useApi = () => {
     setAuthToken,
     removeAuthToken,
     getAuthToken,
-  }
-}
+  };
+};
