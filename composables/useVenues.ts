@@ -27,14 +27,12 @@ export const useVenues = () => {
   const getNearbyVenues = async (
     latitude: number,
     longitude: number,
-    radius: number = 100,
     category?: string,
   ) => {
     try {
       const params: any = {
         latitude,
         longitude,
-        radius,
       };
 
       if (category) {

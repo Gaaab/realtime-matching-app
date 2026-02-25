@@ -38,15 +38,10 @@ const handleCheckIn = async () => {
   if (!props.venue) return
 
   try {
-    await venuesStore.checkInToVenue(
-      props.venue.id,
-      props.venue.google_place_id,
-      props.venue.latitude,
-      props.venue.longitude
-    )
+    venuesStore.clearError()
+    await venuesStore.checkInToVenue(props.venue)
   } catch (err) {
     console.error('Check-in failed:', err)
-    // Error is stored in venuesStore.error
   }
 }
 
@@ -148,6 +143,7 @@ const openDirections = () => {
           :src="venue.photos[currentPhotoIndex]"
           :alt="venue.name"
           class="w-full h-full object-cover transition-opacity duration-300"
+          @error="($event.target as HTMLImageElement).style.display = 'none'"
         />
 
         <!-- Photo Navigation -->

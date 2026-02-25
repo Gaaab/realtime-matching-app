@@ -76,7 +76,6 @@ const handleSearch = async (query: string) => {
       await venuesStore.fetchNearbyVenues(
         userLocation.value.latitude,
         userLocation.value.longitude,
-        1000,
       );
     }
     return;
@@ -93,7 +92,6 @@ const handleSearch = async (query: string) => {
         location: query.trim(),
         latitude: userLocation.value?.latitude,
         longitude: userLocation.value?.longitude,
-        radius: 1000, // 50km radius for search
         limit: 50,
       };
 
@@ -124,7 +122,6 @@ const clearSearch = async () => {
     await venuesStore.fetchNearbyVenues(
       userLocation.value.latitude,
       userLocation.value.longitude,
-      5000,
     );
   }
 };
@@ -140,6 +137,8 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   clearMarkers();
+  const { stopLocationTracking } = useLocation();
+  stopLocationTracking();
 });
 
 /**
@@ -212,7 +211,7 @@ const fetchAndSaveGooglePlaces = async (
       console.log(
         "[VenueMap] No venues returned from batch (likely all duplicates), fetching from search endpoint",
       );
-      await venuesStore.fetchNearbyVenues(location.lat, location.lng, 100);
+      await venuesStore.fetchNearbyVenues(location.lat, location.lng);
     } else {
       // Update the venues store with the saved venues
       venuesStore.setNearbyVenues(savedVenues);
@@ -220,7 +219,7 @@ const fetchAndSaveGooglePlaces = async (
   } catch (error) {
     console.error("[VenueMap] Failed to fetch and save Google Places:", error);
     // Fallback to fetching from backend if Google Places fails
-    await venuesStore.fetchNearbyVenues(location.lat, location.lng, 100);
+    await venuesStore.fetchNearbyVenues(location.lat, location.lng);
   } finally {
     isFetchingPlaces.value = false;
   }
@@ -243,6 +242,11 @@ const initializeMap = async () => {
     }
 
     userLocation.value = browserLocation;
+
+    // Start continuous location tracking for API headers
+    const { startLocationTracking } = useLocation();
+    startLocationTracking();
+
     console.log("Using browser geolocation:", userLocation.value);
 
     // Create map centered on user location with appropriate zoom
@@ -732,7 +736,6 @@ const refreshVenues = async () => {
   await venuesStore.fetchNearbyVenues(
     userLocation.value.latitude,
     userLocation.value.longitude,
-    5000,
   );
 
   await updateVenueMarkers();

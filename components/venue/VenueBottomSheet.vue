@@ -74,14 +74,11 @@ const handleCheckIn = async () => {
   if (!props.venue) return
 
   try {
-    await venuesStore.checkInToVenue(
-      props.venue.id,
-      props.venue.google_place_id,
-      props.venue.latitude,
-      props.venue.longitude
-    )
+    venuesStore.clearError()
+    await venuesStore.checkInToVenue(props.venue)
   } catch (err) {
     console.error('Check-in failed:', err)
+    // Error is handled by the store and displayed via venuesStore.error
   }
 }
 

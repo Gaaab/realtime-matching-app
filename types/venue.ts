@@ -1,80 +1,85 @@
 export interface Venue {
-  id: number
-  name: string
-  address: string
-  city: string
-  state: string
-  country: string
-  postal_code: string
+  id: number;
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  country: string;
+  postal_code: string;
   // Support both flat and nested location formats
-  latitude?: number
-  longitude?: number
+  latitude?: number;
+  longitude?: number;
   location?: {
-    latitude: number
-    longitude: number
-  }
-  google_place_id: string
-  category: string
-  subcategory?: string
-  rating?: number
-  price_level?: number
-  phone?: string
-  website?: string
-  hours?: VenueHours
-  photos?: string[]
-  distance?: number
-  created_at: string
-  updated_at: string
+    latitude: number;
+    longitude: number;
+  };
+  google_place_id?: string;
+  category: string;
+  subcategory?: string;
+  rating?: number;
+  price_level?: number;
+  phone?: string;
+  website?: string;
+  hours?: VenueHours;
+  photos?: string[];
+  distance?: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface VenueHours {
-  monday?: string
-  tuesday?: string
-  wednesday?: string
-  thursday?: string
-  friday?: string
-  saturday?: string
-  sunday?: string
+  monday?: string;
+  tuesday?: string;
+  wednesday?: string;
+  thursday?: string;
+  friday?: string;
+  saturday?: string;
+  sunday?: string;
 }
 
 export interface VenueSearchParams {
-  location?: string
-  latitude?: number
-  longitude?: number
-  radius?: number
-  category?: string
-  min_rating?: number
-  price_level?: number
-  limit?: number
+  location?: string;
+  latitude?: number;
+  longitude?: number;
+  category?: string;
+  min_rating?: number;
+  price_level?: number;
+  limit?: number;
 }
 
 export interface VenueCheckIn {
-  id: number
-  user_id: number
-  venue_id: number
-  checked_in_at: string
-  checked_out_at: string | null
-  venue: Venue
-  is_active: boolean
+  id: number;
+  user_id: number;
+  venue_id: number;
+  checked_in_at: string;
+  checked_out_at: string | null;
+  venue: Venue;
+  is_active: boolean;
 }
 
 export interface NearbyUser {
-  id: number
-  user_id: number
-  first_name: string
-  age: number
-  profile_picture_url: string | null
-  distance: number
+  id: number;
+  user_id: number;
+  first_name: string;
+  age: number;
+  profile_picture_url: string | null;
+  distance: number;
   venue?: {
-    id: number
-    name: string
-  }
-  checked_in_at: string
+    id: number;
+    name: string;
+  };
+  checked_in_at: string;
 }
 
 export interface CheckInData {
-  venue_id: number
-  google_place_id: string
-  latitude?: number
-  longitude?: number
+  google_place_id?: string;
+  venue_id?: number;
+  latitude: number;
+  longitude: number;
+}
+
+export interface ProximityError {
+  error_code: "TOO_FAR_FROM_VENUE";
+  message: string;
+  distance_meters: number;
 }
