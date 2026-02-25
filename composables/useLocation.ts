@@ -201,7 +201,7 @@ export const useLocation = () => {
   };
 
   const stopLocationTracking = () => {
-    if (_watchId.value !== null) {
+    if (_watchId.value !== null && navigator?.geolocation) {
       navigator.geolocation.clearWatch(_watchId.value);
       _watchId.value = null;
     }

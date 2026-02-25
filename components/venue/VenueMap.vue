@@ -244,8 +244,8 @@ const initializeMap = async () => {
     userLocation.value = browserLocation;
 
     // Start continuous location tracking for API headers
-    const { startLocationTracking } = useLocation()
-    startLocationTracking()
+    const { startLocationTracking } = useLocation();
+    startLocationTracking();
 
     console.log("Using browser geolocation:", userLocation.value);
 
