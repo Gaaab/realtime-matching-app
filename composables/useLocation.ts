@@ -156,6 +156,10 @@ export const useLocation = () => {
 
   const startLocationTracking = () => {
     if (_watchId.value !== null) return; // Already tracking
+    if (!navigator?.geolocation) {
+      console.warn("Geolocation not available, location tracking disabled");
+      return;
+    }
 
     // Get initial position
     getCurrentPosition();

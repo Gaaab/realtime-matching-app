@@ -192,14 +192,10 @@ export const useApi = () => {
     }
 
     try {
-      const token = getAuthToken();
-      const headers: HeadersInit = {
-        Accept: "application/json",
-      };
-
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
+      const baseHeaders = getHeaders(true);
+      const headers: HeadersInit = { ...baseHeaders };
+      // Remove Content-Type so browser sets multipart boundary automatically
+      delete (headers as Record<string, string>)["Content-Type"];
 
       const response = await fetch(`${baseURL}${endpoint}`, {
         method: "POST",

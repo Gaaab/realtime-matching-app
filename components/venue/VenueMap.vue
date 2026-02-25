@@ -137,6 +137,8 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   clearMarkers();
+  const { stopLocationTracking } = useLocation();
+  stopLocationTracking();
 });
 
 /**

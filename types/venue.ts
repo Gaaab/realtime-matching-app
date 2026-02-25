@@ -13,7 +13,7 @@ export interface Venue {
     latitude: number;
     longitude: number;
   };
-  google_place_id: string;
+  google_place_id?: string;
   category: string;
   subcategory?: string;
   rating?: number;
@@ -41,7 +41,6 @@ export interface VenueSearchParams {
   location?: string;
   latitude?: number;
   longitude?: number;
-  radius?: number;
   category?: string;
   min_rating?: number;
   price_level?: number;
