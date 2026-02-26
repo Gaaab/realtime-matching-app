@@ -23,6 +23,8 @@ export interface Venue {
   hours?: VenueHours;
   photos?: string[];
   distance?: number;
+  distance_meters?: number | null;
+  can_checkin?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -45,6 +47,12 @@ export interface VenueSearchParams {
   min_rating?: number;
   price_level?: number;
   limit?: number;
+}
+
+export interface NearbyVenueParams {
+  latitude: number;
+  longitude: number;
+  radius?: number;
 }
 
 export interface VenueCheckIn {
