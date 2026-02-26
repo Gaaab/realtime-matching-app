@@ -119,6 +119,8 @@ export const useVenuesStore = defineStore("venues", {
       return state.currentCheckIn?.venue_id || null;
     },
 
+    // Accesses _sharedLocation (external ref from useLocation composable) directly
+    // so this getter recomputes reactively as the user's GPS position changes.
     venuesWithProximity(): Venue[] {
       const location = _sharedLocation.value;
       if (!location) return this.venues;
@@ -140,6 +142,14 @@ export const useVenuesStore = defineStore("venues", {
           can_checkin: dist <= CHECKIN_RADIUS_METERS,
         };
       });
+    },
+
+    checkInableVenues(): Venue[] {
+      return this.venuesWithProximity.filter((v) => v.can_checkin === true);
+    },
+
+    discoveryOnlyVenues(): Venue[] {
+      return this.venuesWithProximity.filter((v) => v.can_checkin !== true);
     },
   },
 

@@ -336,27 +336,28 @@ const openDirections = () => {
 
         <!-- Check-in Button -->
         <div class="mb-6">
-          <UiButton
-            v-if="!isCheckedInHere"
-            @click="handleCheckIn"
-            :loading="isCheckingIn"
-            :disabled="!canCheckIn || (isCheckedIn && !isCheckedInHere)"
-            fullWidth
-            size="lg"
-          >
-            <template v-if="isCheckedIn && !isCheckedInHere">
-              Already Checked In
-            </template>
-            <template v-else-if="!canCheckIn">
-              Too far{{ distanceText ? ` (${distanceText})` : '' }}
-            </template>
-            <template v-else>
-              Check In Here
-            </template>
-          </UiButton>
-          <p v-if="!isCheckedInHere && !canCheckIn && distanceText" class="text-center text-sm text-gray-500 mt-2">
-            Move within 200m to check in
-          </p>
+          <template v-if="!isCheckedInHere">
+            <UiButton
+              @click="handleCheckIn"
+              :loading="isCheckingIn"
+              :disabled="!canCheckIn || (isCheckedIn && !isCheckedInHere)"
+              fullWidth
+              size="lg"
+            >
+              <template v-if="isCheckedIn && !isCheckedInHere">
+                Already Checked In
+              </template>
+              <template v-else-if="!canCheckIn">
+                Too far{{ distanceText ? ` (${distanceText})` : '' }}
+              </template>
+              <template v-else>
+                Check In Here
+              </template>
+            </UiButton>
+            <p v-if="!canCheckIn && distanceText" class="text-center text-sm text-gray-500 mt-2">
+              Move within 200m to check in
+            </p>
+          </template>
           <UiButton
             v-else
             @click="handleCheckOut"

@@ -1,7 +1,6 @@
 import type {
   Venue,
   VenueSearchParams,
-  NearbyVenueParams,
   VenueCheckIn,
   NearbyUser,
   CheckInData,
