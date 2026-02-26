@@ -446,7 +446,7 @@ const updateVenueMarkers = async (shouldFitBounds: boolean = true) => {
   );
 
   // Create markers for all venues
-  for (const venue of venuesStore.venues) {
+  for (const venue of venuesStore.venuesWithProximity) {
     // Extract coordinates using helper function (handles both formats)
     const coordinates = getVenueCoordinates(venue);
 
@@ -474,22 +474,14 @@ const updateVenueMarkers = async (shouldFitBounds: boolean = true) => {
     const activeUserCount = (venue as any).active_user_count || 0;
     const hasActiveUsers = activeUserCount > 0;
 
-    // Calculate distance from user location
-    const distance = userLocation.value
-      ? calculateDistance(
-          userLocation.value.latitude,
-          userLocation.value.longitude,
-          coordinates.lat,
-          coordinates.lng,
-        )
-      : 0;
-
     try {
+      const canCheckIn = venue.can_checkin === true;
+
       const contentEL = createMarkerContent(
         venue,
         hasActiveUsers,
         activeUserCount,
-        distance,
+        canCheckIn,
       );
 
       //const pin = await createPinMarkerIcon({
@@ -630,16 +622,20 @@ const createMarkerContent = (
   venue: Venue,
   isActive: boolean,
   userCount: number = 0,
-  distance: number = 0,
+  canCheckIn: boolean = false,
 ) => {
   const wrapper = document.createElement("div");
   wrapper.className = `people-pin ${isActive ? "active" : ""}`;
 
   const bgColor = isActive ? "#0050FF" : "#E5E7EB";
   const fgColor = isActive ? "#FFFFFF" : "#374151";
+  const ringColor = canCheckIn ? "#22C55E" : "none";
+  const ringWidth = canCheckIn ? 3 : 0;
 
   wrapper.innerHTML = `
     <svg width="72" height="44" viewBox="0 0 72 44" xmlns="http://www.w3.org/2000/svg">
+      ${canCheckIn ? `<rect x="-2" y="-2" width="76" height="40" rx="20" fill="none" stroke="${ringColor}" stroke-width="${ringWidth}" />` : ""}
+
       <!-- Bubble -->
       <rect x="0" y="0" width="72" height="36" rx="18" fill="${bgColor}" />
 
@@ -667,7 +663,6 @@ const createMarkerContent = (
     </svg>
   `;
 
-  // Hover scale (optional but nice)
   wrapper.style.cursor = "pointer";
   wrapper.style.transition = "transform 0.15s ease";
   wrapper.addEventListener("mouseenter", () => {
@@ -744,7 +739,7 @@ const refreshVenues = async () => {
 // Watch for venue changes
 // Note: Only fit bounds on initial load, not when updating markers from panning
 watch(
-  () => venuesStore.venues,
+  () => venuesStore.venuesWithProximity,
   async () => {
     await updateVenueMarkers(false);
   },
