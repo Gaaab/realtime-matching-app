@@ -29,6 +29,17 @@ const activeUserCount = computed(() => {
   return (props.venue as any)?.active_user_count || 0
 })
 
+const canCheckIn = computed(() => {
+  return props.venue?.can_checkin === true;
+})
+
+const distanceText = computed(() => {
+  const meters = props.venue?.distance_meters;
+  if (meters == null) return '';
+  if (meters < 1000) return `${meters}m away`;
+  return `${(meters / 1000).toFixed(1)}km away`;
+})
+
 // Reset photo index when venue changes
 watch(() => props.venue, () => {
   currentPhotoIndex.value = 0
@@ -247,8 +258,8 @@ const openDirections = () => {
               <div class="flex-1">
                 <p class="text-sm font-medium text-gray-900">{{ venue.address }}</p>
                 <p class="text-sm text-gray-500">{{ venue.city }}, {{ venue.state }} {{ venue.postal_code }}</p>
-                <p v-if="venue.distance" class="text-sm text-primary-600 font-medium mt-1">
-                  {{ formatDistance(venue.distance) }}
+                <p v-if="distanceText" class="text-sm text-primary-600 font-medium mt-1">
+                  {{ distanceText }}
                 </p>
               </div>
             </div>
@@ -266,14 +277,14 @@ const openDirections = () => {
           </div>
 
           <!-- Distance Card -->
-          <div v-if="venue.distance" class="p-3 bg-gray-50 rounded-xl">
+          <div v-if="distanceText" class="p-3 bg-gray-50 rounded-xl">
             <div class="flex items-center gap-2 mb-1">
               <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
               </svg>
               <span class="text-xs font-medium text-gray-500 uppercase">Distance</span>
             </div>
-            <p class="text-sm font-medium text-gray-900">{{ formatDistance(venue.distance) }}</p>
+            <p class="text-sm font-medium text-gray-900">{{ distanceText }}</p>
           </div>
         </div>
 
@@ -329,12 +340,23 @@ const openDirections = () => {
             v-if="!isCheckedInHere"
             @click="handleCheckIn"
             :loading="isCheckingIn"
-            :disabled="isCheckedIn && !isCheckedInHere"
+            :disabled="!canCheckIn || (isCheckedIn && !isCheckedInHere)"
             fullWidth
             size="lg"
           >
-            {{ isCheckedIn ? 'Already Checked In' : 'Check In Here' }}
+            <template v-if="isCheckedIn && !isCheckedInHere">
+              Already Checked In
+            </template>
+            <template v-else-if="!canCheckIn">
+              Too far{{ distanceText ? ` (${distanceText})` : '' }}
+            </template>
+            <template v-else>
+              Check In Here
+            </template>
           </UiButton>
+          <p v-if="!isCheckedInHere && !canCheckIn && distanceText" class="text-center text-sm text-gray-500 mt-2">
+            Move within 200m to check in
+          </p>
           <UiButton
             v-else
             @click="handleCheckOut"
