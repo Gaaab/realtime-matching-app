@@ -1,6 +1,7 @@
 import type {
   Venue,
   VenueSearchParams,
+  NearbyVenueParams,
   VenueCheckIn,
   NearbyUser,
   CheckInData,
@@ -27,16 +28,16 @@ export const useVenues = () => {
   const getNearbyVenues = async (
     latitude: number,
     longitude: number,
-    category?: string,
+    radius?: number,
   ) => {
     try {
-      const params: any = {
+      const params: Record<string, unknown> = {
         latitude,
         longitude,
       };
 
-      if (category) {
-        params.category = category;
+      if (radius) {
+        params.radius = radius;
       }
 
       const response = await api.get<Venue[]>("/venue/nearby", params);
