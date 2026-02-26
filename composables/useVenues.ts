@@ -6,7 +6,7 @@ import type {
   CheckInData,
 } from "~/types/venue";
 
-function normalizeVenuePhotos(venue: any): Venue {
+function normalizeVenuePhotos(venue: Venue & { photo_url?: string }): Venue {
   if (!venue.photos?.length && venue.photo_url) {
     return { ...venue, photos: [venue.photo_url] };
   }
@@ -64,7 +64,7 @@ export const useVenues = () => {
       const response = await api.get<Venue>(`/venue/${venueId}`);
 
       if (response.success && response.data) {
-        return response.data;
+        return normalizeVenuePhotos(response.data);
       }
 
       throw new Error(response.message || "Failed to fetch venue");
