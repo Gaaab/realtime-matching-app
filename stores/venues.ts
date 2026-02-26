@@ -5,6 +5,7 @@ import type {
   NearbyUser,
   CheckInData,
 } from "~/types/venue";
+import { _sharedLocation } from "~/composables/useLocation";
 
 interface VenueState {
   venues: Venue[];
@@ -34,6 +35,50 @@ function dedupeVenues(venues: Venue[]): Venue[] {
     }
   });
   return Array.from(map.values());
+}
+
+const CHECKIN_RADIUS_METERS = 200;
+
+function getVenueCoords(venue: Venue): { lat: number; lng: number } | null {
+  if (venue.location?.latitude != null && venue.location?.longitude != null) {
+    const lat =
+      typeof venue.location.latitude === "string"
+        ? parseFloat(venue.location.latitude)
+        : venue.location.latitude;
+    const lng =
+      typeof venue.location.longitude === "string"
+        ? parseFloat(venue.location.longitude)
+        : venue.location.longitude;
+    if (!Number.isNaN(lat) && !Number.isNaN(lng)) return { lat, lng };
+  }
+  if (venue.latitude != null && venue.longitude != null) {
+    const lat =
+      typeof venue.latitude === "string"
+        ? parseFloat(venue.latitude as any)
+        : venue.latitude;
+    const lng =
+      typeof venue.longitude === "string"
+        ? parseFloat(venue.longitude as any)
+        : venue.longitude;
+    if (!Number.isNaN(lat) && !Number.isNaN(lng)) return { lat, lng };
+  }
+  return null;
+}
+
+function haversineMeters(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
+  const R = 6371000; // Earth radius in meters
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 export const useVenuesStore = defineStore("venues", {
@@ -73,39 +118,49 @@ export const useVenuesStore = defineStore("venues", {
     checkedInVenueId: (state): number | null => {
       return state.currentCheckIn?.venue_id || null;
     },
+
+    venuesWithProximity(): Venue[] {
+      const location = _sharedLocation.value;
+      if (!location) return this.venues;
+
+      return this.venues.map((v) => {
+        const coords = getVenueCoords(v);
+        if (!coords) {
+          return { ...v, distance_meters: null, can_checkin: false };
+        }
+        const dist = haversineMeters(
+          location.latitude,
+          location.longitude,
+          coords.lat,
+          coords.lng,
+        );
+        return {
+          ...v,
+          distance_meters: Math.round(dist),
+          can_checkin: dist <= CHECKIN_RADIUS_METERS,
+        };
+      });
+    },
   },
 
   actions: {
-    async fetchNearbyVenues(latitude: number, longitude: number) {
+    async fetchNearbyVenues(
+      latitude: number,
+      longitude: number,
+      radius?: number,
+    ) {
       this.isLoadingVenues = true;
       this.error = null;
 
       try {
         console.log(
-          `[VenuesStore] Fetching venues at (${latitude}, ${longitude})`,
+          `[VenuesStore] Fetching nearby venues at (${latitude}, ${longitude}), radius=${radius ?? "default"}`,
         );
 
-        const { searchVenues } = useVenues();
-        const venues = await searchVenues({
-          latitude,
-          longitude,
-          limit: 50,
-        });
+        const { getNearbyVenues } = useVenues();
+        const venues = await getNearbyVenues(latitude, longitude, radius);
 
         console.log(`[VenuesStore] Received ${venues.length} venues from API`);
-
-        if (venues.length > 0) {
-          console.log(
-            "[VenuesStore] Sample venues:",
-            venues.slice(0, 3).map((v) => ({
-              id: v.id,
-              name: v.name,
-              lat: v.latitude,
-              lng: v.longitude,
-              google_place_id: v.google_place_id,
-            })),
-          );
-        }
 
         this.venues = dedupeVenues(venues);
         return venues;

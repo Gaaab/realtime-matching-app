@@ -4,7 +4,7 @@ export interface Coordinates {
 }
 
 // Shared state across all useLocation() instances
-const _sharedLocation = ref<Coordinates | null>(null);
+export const _sharedLocation = ref<Coordinates | null>(null);
 const _lastReportedLocation = ref<Coordinates | null>(null);
 const _watchId = ref<number | null>(null);
 
