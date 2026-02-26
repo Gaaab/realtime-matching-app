@@ -6,6 +6,13 @@ import type {
   CheckInData,
 } from "~/types/venue";
 
+function normalizeVenuePhotos(venue: any): Venue {
+  if (!venue.photos?.length && venue.photo_url) {
+    return { ...venue, photos: [venue.photo_url] };
+  }
+  return venue;
+}
+
 export const useVenues = () => {
   const api = useApi();
 
@@ -14,7 +21,7 @@ export const useVenues = () => {
       const response = await api.get<Venue[]>("/venue/search", params as any);
 
       if (response.success && response.data) {
-        return response.data;
+        return response.data.map(normalizeVenuePhotos);
       }
 
       throw new Error(response.message || "Failed to search venues");
@@ -42,7 +49,7 @@ export const useVenues = () => {
       const response = await api.get<Venue[]>("/venue/nearby", params);
 
       if (response.success && response.data) {
-        return response.data;
+        return response.data.map(normalizeVenuePhotos);
       }
 
       throw new Error(response.message || "Failed to fetch nearby venues");
