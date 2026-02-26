@@ -26,6 +26,17 @@ const activeUserCount = computed(() => {
   return (props.venue as any).active_user_count || 0
 })
 
+const canCheckIn = computed(() => {
+  return props.venue?.can_checkin === true;
+})
+
+const distanceText = computed(() => {
+  const meters = props.venue?.distance_meters;
+  if (meters == null) return '';
+  if (meters < 1000) return `${meters}m away`;
+  return `${(meters / 1000).toFixed(1)}km away`;
+})
+
 // Bottom sheet drag handling
 const sheetRef = ref<HTMLElement | null>(null)
 const isDragging = ref(false)
@@ -242,8 +253,8 @@ onBeforeUnmount(() => {
               <div>
                 <p class="text-gray-700">{{ venue.address }}</p>
                 <p class="text-gray-500">{{ venue.city }}, {{ venue.state }} {{ venue.postal_code }}</p>
-                <p v-if="venue.distance" class="text-primary-600 font-medium mt-1">
-                  {{ formatDistance(venue.distance) }}
+                <p v-if="distanceText" class="text-primary-600 font-medium mt-1">
+                  {{ distanceText }}
                 </p>
               </div>
             </div>
@@ -314,7 +325,7 @@ onBeforeUnmount(() => {
                 <UiButton
                   @click="handleCheckIn"
                   :loading="isCheckingIn"
-                  :disabled="isCheckedIn && !isCheckedInHere"
+                  :disabled="!canCheckIn || (isCheckedIn && !isCheckedInHere)"
                   fullWidth
                   size="lg"
                   class="shadow-lg shadow-primary-500/25"
@@ -322,11 +333,22 @@ onBeforeUnmount(() => {
                   <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                   </svg>
-                  {{ isCheckedIn ? 'Checked in elsewhere' : 'Check In Here' }}
+                  <template v-if="isCheckedIn && !isCheckedInHere">
+                    Checked in elsewhere
+                  </template>
+                  <template v-else-if="!canCheckIn">
+                    Too far{{ distanceText ? ` (${distanceText})` : '' }}
+                  </template>
+                  <template v-else>
+                    Check In Here
+                  </template>
                 </UiButton>
 
                 <p v-if="isCheckedIn && !isCheckedInHere" class="text-center text-sm text-gray-500 mt-2">
                   You need to check out from your current venue first
+                </p>
+                <p v-else-if="!canCheckIn && distanceText" class="text-center text-sm text-gray-500 mt-2">
+                  Move within 200m to check in
                 </p>
               </template>
 
