@@ -35,10 +35,12 @@ const { createVenuesBatch } = useVenues();
 
 const mapContainer = ref<HTMLElement | null>(null);
 const map = shallowRef<google.maps.Map | null>(null);
-const markers = shallowRef<Map<number, google.maps.marker.AdvancedMarkerElement>>(
-  new Map(),
+const markers = shallowRef<
+  Map<number, google.maps.marker.AdvancedMarkerElement>
+>(new Map());
+const userMarker = shallowRef<google.maps.marker.AdvancedMarkerElement | null>(
+  null,
 );
-const userMarker = shallowRef<google.maps.marker.AdvancedMarkerElement | null>(null);
 const userLocation = ref<{ latitude: number; longitude: number } | null>(null);
 
 const isInitialized = ref(false);
@@ -60,7 +62,7 @@ const SYDNEY_OPERA_HOUSE = {
 };
 
 // Default zoom level to show ~10km radius
-const DEFAULT_ZOOM = 15;
+const DEFAULT_ZOOM = 17;
 
 const handleSearch = async (query: string) => {
   // Clear existing debounce timer
@@ -270,11 +272,15 @@ const initializeMap = async () => {
     // Fetch nearby places from Google Places API and save to backend
     await fetchAndSaveGooglePlaces(center);
 
-    // Add venue markers
-    await updateVenueMarkers();
+    // Add venue markers (skip fitBounds to keep DEFAULT_ZOOM)
+    await updateVenueMarkers(false);
 
-    // Check if user has an active check-in
+    // Check if user has an active check-in and highlight that marker
     await venuesStore.fetchCurrentCheckIn();
+    if (venuesStore.checkedInVenueId) {
+      selectedVenueId.value = venuesStore.checkedInVenueId;
+      updateMarkerStyle(venuesStore.checkedInVenueId, true);
+    }
 
     // Add bounds change listener to fetch venues when panning/zooming
     // This will update markers without re-centering the map view
@@ -547,7 +553,6 @@ const updateVenueMarkers = async (shouldFitBounds: boolean = true) => {
   }
 };
 
-
 /**
  * Validates that coordinates are valid numbers within acceptable ranges
  * @param lat - Latitude value to validate
@@ -572,7 +577,6 @@ const isValidCoordinates = (lat: unknown, lng: unknown): boolean => {
   return true;
 };
 
-
 const createMarkerContent = (
   venue: Venue,
   isActive: boolean,
@@ -582,46 +586,54 @@ const createMarkerContent = (
   const wrapper = document.createElement("div");
   wrapper.className = `venue-pin ${isActive ? "active" : ""}`;
 
-  // Branding: primary #0050FF, accent #00D9FF
-  const pinFill = isActive ? "#0050FF" : "#94A3B8";
-  const pinStroke = isActive ? "#003DB3" : "#64748B";
-  const dotFill = isActive ? "#00D9FF" : "#CBD5E1";
+  const bgColor = isActive ? "#2D3380" : "#E8E8EC";
+  const textColor = isActive ? "#FFFFFF" : "#4A4A5A";
+  const countText = userCount > 99 ? "99+" : String(userCount);
 
-  const badgeHtml =
-    isActive && userCount > 0
-      ? `<g transform="translate(28, -2)">
-          <circle cx="0" cy="0" r="9" fill="#00D9FF" stroke="white" stroke-width="2"/>
-          <text x="0" y="4" text-anchor="middle" font-size="10" font-weight="700" fill="#003DB3" font-family="system-ui, -apple-system, sans-serif">${userCount > 9 ? "9+" : userCount}</text>
-        </g>`
-      : "";
-
-  const checkInRing = canCheckIn
-    ? `<circle cx="20" cy="15" r="17" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-dasharray="4 3"/>`
-    : "";
+  // Pill bubble with people icon + count and a tail
+  // Active: dark navy, larger. Inactive: light gray, smaller.
+  const scale = isActive ? 1.15 : 1;
+  const w = Math.round(54 * scale);
+  const h = Math.round(34 * scale);
+  const bubbleH = Math.round(26 * scale);
+  const r = Math.round(13 * scale);
+  const tailSize = Math.round(5 * scale);
+  const midX = w / 2;
+  const iconSize = isActive ? 14 : 12;
+  const fontSize = isActive ? 14 : 12;
 
   wrapper.innerHTML = `
-    <svg width="40" height="52" viewBox="0 0 40 52" xmlns="http://www.w3.org/2000/svg" overflow="visible">
-      ${checkInRing}
-      ${badgeHtml}
-      <defs>
-        <linearGradient id="pin-${venue.id}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${pinFill}"/>
-          <stop offset="100%" stop-color="${pinStroke}"/>
-        </linearGradient>
-      </defs>
-      <path d="M20 0C11.7 0 5 6.7 5 15c0 10 15 35 15 35s15-25 15-35C35 6.7 28.3 0 20 0z"
-            fill="url(#pin-${venue.id})" stroke="white" stroke-width="2"/>
-      <circle cx="20" cy="15" r="6" fill="white"/>
-      <circle cx="20" cy="15" r="3.5" fill="${dotFill}"/>
+    <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+      <!-- Bubble -->
+      <rect x="0" y="0" width="${w}" height="${bubbleH}" rx="${r}" fill="${bgColor}"/>
+      <!-- Tail -->
+      <polygon points="${midX - tailSize},${bubbleH} ${midX + tailSize},${bubbleH} ${midX},${h}" fill="${bgColor}"/>
+      <!-- People icon -->
+      <g transform="translate(${Math.round(w * 0.22)}, ${Math.round(bubbleH / 2)})" fill="${textColor}">
+        <circle cx="-3" cy="-4" r="${Math.round(iconSize * 0.2)}"/>
+        <ellipse cx="-3" cy="${Math.round(iconSize * 0.12)}" rx="${Math.round(iconSize * 0.25)}" ry="${Math.round(iconSize * 0.15)}"/>
+        <circle cx="4" cy="-4" r="${Math.round(iconSize * 0.2)}"/>
+        <ellipse cx="4" cy="${Math.round(iconSize * 0.12)}" rx="${Math.round(iconSize * 0.25)}" ry="${Math.round(iconSize * 0.15)}"/>
+      </g>
+      <!-- Count -->
+      <text
+        x="${Math.round(w * 0.62)}"
+        y="${Math.round(bubbleH * 0.62)}"
+        text-anchor="middle"
+        font-size="${fontSize}"
+        font-weight="700"
+        fill="${textColor}"
+        font-family="system-ui, -apple-system, sans-serif"
+      >${countText}</text>
     </svg>
   `;
 
-  wrapper.style.width = "40px";
-  wrapper.style.height = "52px";
+  wrapper.style.width = `${w}px`;
+  wrapper.style.height = `${h}px`;
   wrapper.style.cursor = "pointer";
   wrapper.style.transition = "transform 0.15s ease";
   wrapper.addEventListener("mouseenter", () => {
-    wrapper.style.transform = "scale(1.15)";
+    wrapper.style.transform = "scale(1.1)";
   });
   wrapper.addEventListener("mouseleave", () => {
     wrapper.style.transform = "scale(1)";
@@ -631,22 +643,47 @@ const createMarkerContent = (
 };
 
 const createUserLocationMarkerContent = () => {
-  // Create a marker for user location (green/cyan dot)
   const div = document.createElement("div");
   div.className = "user-location-marker";
 
   div.innerHTML = `
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="8" fill="#00D9FF" stroke="white" stroke-width="2"/>
-      <circle cx="12" cy="12" r="4" fill="white"/>
+    <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="16" cy="16" r="14" fill="#C4C0E8" opacity="0.5"/>
+      <circle cx="16" cy="16" r="9" fill="#9B93D5" stroke="white" stroke-width="2"/>
+      <circle cx="16" cy="16" r="4" fill="#2D3380"/>
     </svg>
   `;
+
+  div.style.width = "32px";
+  div.style.height = "32px";
 
   return div;
 };
 
+const selectedVenueId = ref<number | null>(null);
+
+const updateMarkerStyle = (venueId: number, isActive: boolean) => {
+  const marker = markers.value.get(venueId);
+  if (!marker) return;
+
+  const venue = venuesStore.venuesWithProximity.find((v) => v.id === venueId);
+  if (!venue) return;
+
+  const activeUserCount = (venue as any).active_user_count || 0;
+  const canCheckIn = venue.can_checkin === true;
+  marker.content = createMarkerContent(venue, isActive, activeUserCount, canCheckIn);
+};
+
 const handleMarkerClick = async (venue: Venue) => {
-  console.log("Venue marker clicked:", venue.name);
+  // Deselect previous marker
+  if (selectedVenueId.value !== null && selectedVenueId.value !== venue.id) {
+    updateMarkerStyle(selectedVenueId.value, false);
+  }
+
+  // Select new marker
+  selectedVenueId.value = venue.id;
+  updateMarkerStyle(venue.id, true);
+
   venuesStore.setSelectedVenue(venue);
 
   // Fetch users at this venue
@@ -658,13 +695,12 @@ const handleMarkerClick = async (venue: Venue) => {
       console.error("Failed to fetch users at venue:", error);
     }
   } else {
-    // Clear users if no one is checked in
     venuesStore.clearVenueUsers();
   }
 
   emit("venueClick", venue);
 
-  // Optionally pan to venue
+  // Pan to venue
   if (map.value) {
     const coordinates = getVenueCoordinates(venue);
     if (coordinates) {
@@ -915,16 +951,41 @@ defineExpose({
       </div>
     </div>
 
+    <!-- Refresh Button -->
+    <div class="absolute top-4 right-4 z-20">
+      <button
+        @click="refreshVenues"
+        :disabled="venuesStore.isLoadingVenues || isFetchingPlaces"
+        class="bg-white p-3 rounded-lg shadow-lg hover:shadow-xl transition-shadow disabled:opacity-50"
+        title="Refresh venues"
+      >
+        <svg
+          class="w-5 h-5 text-gray-700"
+          :class="{
+            'animate-spin': venuesStore.isLoadingVenues || isFetchingPlaces,
+          }"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+          />
+        </svg>
+      </button>
+    </div>
   </div>
 </template>
 
 <style>
 .venue-pin svg {
-  overflow: visible;
-  filter: drop-shadow(0px 3px 8px rgba(0, 0, 0, 0.2));
+  filter: drop-shadow(0px 2px 6px rgba(0, 0, 0, 0.15));
 }
 
 .venue-pin.active svg {
-  filter: drop-shadow(0px 4px 12px rgba(0, 80, 255, 0.4));
+  filter: drop-shadow(0px 4px 10px rgba(45, 51, 128, 0.4));
 }
 </style>
