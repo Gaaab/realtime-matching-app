@@ -9,7 +9,9 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "test": "playwright test",
-    "test:ui": "playwright test --ui"
+    "test:ui": "playwright test --ui",
+    "test:unit": "vitest run tests/unit/",
+    "test:unit:watch": "vitest tests/unit/"
   },
   "dependencies": {
     "@googlemaps/js-api-loader": "^2.0.2",
