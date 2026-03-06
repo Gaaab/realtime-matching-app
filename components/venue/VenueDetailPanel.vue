@@ -24,9 +24,9 @@ const isCheckedInHere = computed(() => {
   return venuesStore.checkedInVenueId === props.venue?.id
 })
 
-// Active user count from venue data
+// Active user count - read from store's selectedVenue for realtime updates
 const activeUserCount = computed(() => {
-  return (props.venue as any)?.active_user_count || 0
+  return (venuesStore.selectedVenue as any)?.active_user_count || 0
 })
 
 const canCheckIn = computed(() => {

@@ -316,6 +316,24 @@ export const useVenuesStore = defineStore("venues", {
       this.venues = dedupeVenues([...this.venues, ...venues]);
     },
 
+    updateVenueUserCount(venueId: number, delta: number) {
+      const index = this.venues.findIndex((v) => v.id === venueId);
+      if (index === -1) return;
+
+      const venue = this.venues[index];
+      const current = (venue as any).active_user_count || 0;
+      const updated = {
+        ...venue,
+        active_user_count: Math.max(0, current + delta),
+      } as Venue;
+      this.venues.splice(index, 1, updated);
+
+      // Also update selectedVenue if it matches
+      if (this.selectedVenue?.id === venueId) {
+        this.selectedVenue = updated;
+      }
+    },
+
     clearVenueUsers() {
       this.nearbyUsers = [];
     },
