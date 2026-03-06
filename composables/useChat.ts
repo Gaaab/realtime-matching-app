@@ -12,16 +12,30 @@ export const useChat = () => {
   const api = useApi();
   const chatStore = useChatStore();
 
+  const MAX_PROCESSED_IDS = 1000;
   const processedMessageIds = ref<Set<string>>(new Set());
   const processingMessageIds = ref<Set<string>>(new Set());
+
+  const trackProcessedId = (id: string) => {
+    processedMessageIds.value.add(id);
+    if (processedMessageIds.value.size > MAX_PROCESSED_IDS) {
+      const iterator = processedMessageIds.value.values();
+      processedMessageIds.value.delete(iterator.next().value!);
+    }
+  };
 
   // Register realtime event handler for chat events
   const { registerHandler, unregisterHandler } = useRealtime();
   const { handler: chatRealtimeHandler } = createChatRealtimeHandler(
     chatStore,
     processedMessageIds.value,
+    trackProcessedId,
   );
   registerHandler("chat", chatRealtimeHandler);
+
+  onBeforeUnmount(() => {
+    unregisterHandler("chat", chatRealtimeHandler);
+  });
 
   const fetchChannels = async () => {
     try {
@@ -251,7 +265,7 @@ export const useChat = () => {
 
       const messagesResponse = await fetchMessages(channelId, 1, 50);
       messagesResponse.forEach((msg) => {
-        processedMessageIds.value.add(msg.id.toString());
+        trackProcessedId(msg.id.toString());
       });
 
       // Mark channel as subscribed (events come through global realtime handler)
@@ -337,7 +351,7 @@ export const useChat = () => {
           const key = msg.id.toString();
           if (!processedMessageIds.value.has(key)) {
             chatStore.addMessage(channelId, msg);
-            processedMessageIds.value.add(key);
+            trackProcessedId(key);
           }
         });
       }
