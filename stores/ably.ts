@@ -1,34 +1,36 @@
 /**
  * Ably Connection State Store
  *
- * Manages Ably client connection state, errors, and channel subscriptions
+ * Manages Ably client connection state and errors.
+ * With channel multiplexing, activeChannels typically contains a single
+ * multiplexed user channel (e.g. "user.{userId}").
  */
 
-import { defineStore } from 'pinia'
+import { defineStore } from "pinia";
 
 export interface AblyError {
-  code: number
-  message: string
-  statusCode: number
+  code: number;
+  message: string;
+  statusCode: number;
 }
 
 export interface AblyState {
-  isConnected: boolean
-  connectionError: AblyError | null
-  tokenExpiresAt: number | null
-  connectionAttempts: number
-  lastConnectionTime: string | null
-  activeChannels: string[]
+  isConnected: boolean;
+  connectionError: AblyError | null;
+  tokenExpiresAt: number | null;
+  connectionAttempts: number;
+  lastConnectionTime: string | null;
+  activeChannels: string[];
 }
 
-export const useAblyStore = defineStore('ably', {
+export const useAblyStore = defineStore("ably", {
   state: (): AblyState => ({
     isConnected: false,
     connectionError: null,
     tokenExpiresAt: null,
     connectionAttempts: 0,
     lastConnectionTime: null,
-    activeChannels: []
+    activeChannels: [],
   }),
 
   getters: {
@@ -46,10 +48,10 @@ export const useAblyStore = defineStore('ably', {
      * Check if token is about to expire (within 5 minutes)
      */
     isTokenExpiringSoon: (state) => {
-      if (!state.tokenExpiresAt) return false
-      const now = Date.now()
-      const fiveMinutes = 5 * 60 * 1000
-      return state.tokenExpiresAt - now < fiveMinutes
+      if (!state.tokenExpiresAt) return false;
+      const now = Date.now();
+      const fiveMinutes = 5 * 60 * 1000;
+      return state.tokenExpiresAt - now < fiveMinutes;
     },
 
     /**
@@ -61,8 +63,8 @@ export const useAblyStore = defineStore('ably', {
      * Check if subscribed to specific channel
      */
     isSubscribedTo: (state) => (channelName: string) => {
-      return state.activeChannels.includes(channelName)
-    }
+      return state.activeChannels.includes(channelName);
+    },
   },
 
   actions: {
@@ -70,10 +72,10 @@ export const useAblyStore = defineStore('ably', {
      * Set connection status
      */
     setConnected(connected: boolean) {
-      this.isConnected = connected
+      this.isConnected = connected;
       if (connected) {
-        this.lastConnectionTime = new Date().toISOString()
-        this.connectionAttempts = 0
+        this.lastConnectionTime = new Date().toISOString();
+        this.connectionAttempts = 0;
       }
     },
 
@@ -81,9 +83,9 @@ export const useAblyStore = defineStore('ably', {
      * Set connection error
      */
     setConnectionError(error: AblyError | null) {
-      this.connectionError = error
+      this.connectionError = error;
       if (error) {
-        this.connectionAttempts++
+        this.connectionAttempts++;
       }
     },
 
@@ -91,7 +93,7 @@ export const useAblyStore = defineStore('ably', {
      * Set token expiration timestamp (milliseconds)
      */
     setTokenExpiresAt(timestamp: number | null) {
-      this.tokenExpiresAt = timestamp
+      this.tokenExpiresAt = timestamp;
     },
 
     /**
@@ -99,7 +101,7 @@ export const useAblyStore = defineStore('ably', {
      */
     addActiveChannel(channelName: string) {
       if (!this.activeChannels.includes(channelName)) {
-        this.activeChannels.push(channelName)
+        this.activeChannels.push(channelName);
       }
     },
 
@@ -108,27 +110,27 @@ export const useAblyStore = defineStore('ably', {
      */
     removeActiveChannel(channelName: string) {
       this.activeChannels = this.activeChannels.filter(
-        (name) => name !== channelName
-      )
+        (name) => name !== channelName,
+      );
     },
 
     /**
      * Clear all active channels
      */
     clearActiveChannels() {
-      this.activeChannels = []
+      this.activeChannels = [];
     },
 
     /**
      * Reset connection state
      */
     reset() {
-      this.isConnected = false
-      this.connectionError = null
-      this.tokenExpiresAt = null
-      this.connectionAttempts = 0
-      this.lastConnectionTime = null
-      this.activeChannels = []
-    }
-  }
-})
+      this.isConnected = false;
+      this.connectionError = null;
+      this.tokenExpiresAt = null;
+      this.connectionAttempts = 0;
+      this.lastConnectionTime = null;
+      this.activeChannels = [];
+    },
+  },
+});

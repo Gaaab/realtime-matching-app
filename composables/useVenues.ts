@@ -5,6 +5,7 @@ import type {
   NearbyUser,
   CheckInData,
 } from "~/types/venue";
+import { createVenueRealtimeHandler } from "~/composables/useVenueRealtimeHandler";
 
 function normalizeVenuePhotos(venue: Venue & { photo_url?: string }): Venue {
   if (!venue.photos?.length && venue.photo_url) {
@@ -15,6 +16,17 @@ function normalizeVenuePhotos(venue: Venue & { photo_url?: string }): Venue {
 
 export const useVenues = () => {
   const api = useApi();
+
+  // Register realtime event handler for venue events
+  const venuesStore = useVenuesStore();
+  const { registerHandler, unregisterHandler } = useRealtime();
+  const { handler: venueRealtimeHandler } =
+    createVenueRealtimeHandler(venuesStore);
+  registerHandler("venue", venueRealtimeHandler);
+
+  onBeforeUnmount(() => {
+    unregisterHandler("venue", venueRealtimeHandler);
+  });
 
   const searchVenues = async (params: VenueSearchParams) => {
     try {
@@ -264,6 +276,21 @@ export const useVenues = () => {
     }
   };
 
+  const getVenuePresence = async (venueId: number) => {
+    try {
+      const response = await api.get<NearbyUser[]>(
+        `/venue/${venueId}/presence`,
+      );
+      if (response.success && response.data) {
+        return response.data;
+      }
+      throw new Error(response.message || "Failed to fetch venue presence");
+    } catch (error: any) {
+      console.error("Fetch venue presence error:", error);
+      throw error;
+    }
+  };
+
   const loading = ref(false);
   const error = ref<string | null>(null);
 
@@ -278,6 +305,7 @@ export const useVenues = () => {
     getMyCheckIns,
     getCurrentCheckIn,
     getNearbyUsers,
+    getVenuePresence,
     getVenueCheckIns,
     loading,
     error,

@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { useVenuesStore } from '~/stores/venues'
+import { useChatStore } from '~/stores/chat'
+import { useNotificationsStore } from '~/stores/notifications'
 
 const route = useRoute()
 const venuesStore = useVenuesStore()
+const chatStore = useChatStore()
+const notificationsStore = useNotificationsStore()
 
 // Navigation items matching the reference design
 const navItems = [
@@ -17,14 +21,12 @@ const navItems = [
     icon: 'chat',
     path: '/chat',
     ariaLabel: 'View messages',
-    badge: 3
   },
   {
     name: 'Notifications',
     icon: 'notifications',
     path: '/notifications',
     ariaLabel: 'View notifications',
-    badge: 5
   },
   {
     name: 'Profile',
@@ -33,6 +35,9 @@ const navItems = [
     ariaLabel: 'View your profile'
   }
 ]
+
+const chatBadge = computed(() => chatStore.unreadCount || null)
+const notificationBadge = computed(() => notificationsStore.unreadCount || null)
 
 const isActive = (path: string) => {
   // Handle both exact match and sub-routes
@@ -144,13 +149,22 @@ const activeVenuesBadge = computed(() => {
             />
           </svg>
 
-          <!-- Badge for notifications/messages -->
+          <!-- Badge for chat -->
           <span
-            v-if="item.badge && item.badge > 0"
+            v-if="item.icon === 'chat' && chatBadge"
             class="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold text-white bg-red-500 rounded-full"
-            :aria-label="`${item.badge} new ${item.name.toLowerCase()}`"
+            :aria-label="`${chatBadge} unread messages`"
           >
-            {{ item.badge > 99 ? '99+' : item.badge }}
+            {{ chatBadge > 99 ? '99+' : chatBadge }}
+          </span>
+
+          <!-- Badge for notifications -->
+          <span
+            v-if="item.icon === 'notifications' && notificationBadge"
+            class="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold text-white bg-red-500 rounded-full"
+            :aria-label="`${notificationBadge} new notifications`"
+          >
+            {{ notificationBadge > 99 ? '99+' : notificationBadge }}
           </span>
 
           <!-- Active venues badge for Explore tab -->

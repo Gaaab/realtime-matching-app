@@ -1,6 +1,5 @@
 <script setup lang="ts">
-// Minimal layout for dashboard pages with bottom navigation
-// No sidebar - full screen content with fixed bottom nav
+const { activeToast, dismissToast } = useNotifications()
 </script>
 
 <template>
@@ -13,6 +12,9 @@
 
     <!-- Bottom Navigation -->
     <BottomNavigation />
+
+    <!-- Global Toast Notification -->
+    <UiToast :notification="activeToast" @dismiss="dismissToast" />
   </div>
 </template>
 
