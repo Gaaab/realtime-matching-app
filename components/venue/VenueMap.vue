@@ -34,11 +34,11 @@ const {
 const { createVenuesBatch } = useVenues();
 
 const mapContainer = ref<HTMLElement | null>(null);
-const map = ref<google.maps.Map | null>(null);
-const markers = ref<Map<number, google.maps.marker.AdvancedMarkerElement>>(
+const map = shallowRef<google.maps.Map | null>(null);
+const markers = shallowRef<Map<number, google.maps.marker.AdvancedMarkerElement>>(
   new Map(),
 );
-const userMarker = ref<google.maps.marker.AdvancedMarkerElement | null>(null);
+const userMarker = shallowRef<google.maps.marker.AdvancedMarkerElement | null>(null);
 const userLocation = ref<{ latitude: number; longitude: number } | null>(null);
 
 const isInitialized = ref(false);
@@ -258,7 +258,6 @@ const initializeMap = async () => {
     map.value = await createMap(mapContainer.value, {
       center,
       zoom: DEFAULT_ZOOM,
-      mapId: "VENUE_MAP",
     });
 
     if (!map.value) {
@@ -484,32 +483,18 @@ const updateVenueMarkers = async (shouldFitBounds: boolean = true) => {
         canCheckIn,
       );
 
-      //const pin = await createPinMarkerIcon({
-      //  background: '#1A73E8',
-      //  glyphColor: '#fff',
-      //  borderColor: '#174EA6',
-      //})
-
       const marker = await createMarker(map.value, position, {
         title: venue.name,
         content: contentEL,
-        //content: pin.element,
       });
 
       if (marker) {
-        // Add click listener
-        marker.addListener("click", () => {
-          handleMarkerClick(venue);
-        });
-
         marker.addListener("gmp-click", () => {
-          console.log("Advanced marker clicked");
           handleMarkerClick(venue);
         });
 
         markers.value.set(venue.id, marker);
         bounds.extend(position);
-        marker.setMap(map.value);
       } else {
         console.warn(
           `[VenueMap] Failed to create marker for venue: ${venue.name} (ID: ${venue.id})`,
@@ -595,48 +580,48 @@ const createMarkerContent = (
   canCheckIn: boolean = false,
 ) => {
   const wrapper = document.createElement("div");
-  wrapper.className = `people-pin ${isActive ? "active" : ""}`;
+  wrapper.className = `venue-pin ${isActive ? "active" : ""}`;
 
-  const bgColor = isActive ? "#0050FF" : "#E5E7EB";
-  const fgColor = isActive ? "#FFFFFF" : "#374151";
-  const ringColor = canCheckIn ? "#22C55E" : "none";
-  const ringWidth = canCheckIn ? 3 : 0;
+  // Branding: primary #0050FF, accent #00D9FF
+  const pinFill = isActive ? "#0050FF" : "#94A3B8";
+  const pinStroke = isActive ? "#003DB3" : "#64748B";
+  const dotFill = isActive ? "#00D9FF" : "#CBD5E1";
+
+  const badgeHtml =
+    isActive && userCount > 0
+      ? `<g transform="translate(28, -2)">
+          <circle cx="0" cy="0" r="9" fill="#00D9FF" stroke="white" stroke-width="2"/>
+          <text x="0" y="4" text-anchor="middle" font-size="10" font-weight="700" fill="#003DB3" font-family="system-ui, -apple-system, sans-serif">${userCount > 9 ? "9+" : userCount}</text>
+        </g>`
+      : "";
+
+  const checkInRing = canCheckIn
+    ? `<circle cx="20" cy="15" r="17" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-dasharray="4 3"/>`
+    : "";
 
   wrapper.innerHTML = `
-    <svg width="72" height="44" viewBox="0 0 72 44" xmlns="http://www.w3.org/2000/svg">
-      ${canCheckIn ? `<rect x="-2" y="-2" width="76" height="40" rx="20" fill="none" stroke="${ringColor}" stroke-width="${ringWidth}" />` : ""}
-
-      <!-- Bubble -->
-      <rect x="0" y="0" width="72" height="36" rx="18" fill="${bgColor}" />
-
-      <!-- Tail -->
-      <path d="M34 36 L38 36 L36 44 Z" fill="${bgColor}" />
-
-      <!-- Person Icon -->
-      <g transform="translate(18, 10)" fill="${fgColor}">
-        <circle cx="5" cy="5" r="3"/>
-        <path d="M0 14 C0 11 10 11 10 14" />
-      </g>
-
-      <!-- Count -->
-      <text
-        x="46"
-        y="23"
-        text-anchor="middle"
-        font-size="14"
-        font-weight="600"
-        fill="${fgColor}"
-        font-family="system-ui, -apple-system, BlinkMacSystemFont"
-      >
-        ${userCount}
-      </text>
+    <svg width="40" height="52" viewBox="0 0 40 52" xmlns="http://www.w3.org/2000/svg" overflow="visible">
+      ${checkInRing}
+      ${badgeHtml}
+      <defs>
+        <linearGradient id="pin-${venue.id}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${pinFill}"/>
+          <stop offset="100%" stop-color="${pinStroke}"/>
+        </linearGradient>
+      </defs>
+      <path d="M20 0C11.7 0 5 6.7 5 15c0 10 15 35 15 35s15-25 15-35C35 6.7 28.3 0 20 0z"
+            fill="url(#pin-${venue.id})" stroke="white" stroke-width="2"/>
+      <circle cx="20" cy="15" r="6" fill="white"/>
+      <circle cx="20" cy="15" r="3.5" fill="${dotFill}"/>
     </svg>
   `;
 
+  wrapper.style.width = "40px";
+  wrapper.style.height = "52px";
   wrapper.style.cursor = "pointer";
   wrapper.style.transition = "transform 0.15s ease";
   wrapper.addEventListener("mouseenter", () => {
-    wrapper.style.transform = "scale(1.1)";
+    wrapper.style.transform = "scale(1.15)";
   });
   wrapper.addEventListener("mouseleave", () => {
     wrapper.style.transform = "scale(1)";
@@ -930,132 +915,16 @@ defineExpose({
       </div>
     </div>
 
-    <!-- Map Controls -->
-    <div class="absolute top-4 right-4 space-y-2">
-      <button
-        @click="refreshVenues"
-        :disabled="venuesStore.isLoadingVenues || isFetchingPlaces"
-        class="bg-white p-3 rounded-lg shadow-lg hover:shadow-xl transition-shadow disabled:opacity-50"
-        title="Refresh venues"
-      >
-        <svg
-          class="w-5 h-5 text-gray-700"
-          :class="{
-            'animate-spin': venuesStore.isLoadingVenues || isFetchingPlaces,
-          }"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-          />
-        </svg>
-      </button>
-
-      <!-- Background Fetching Indicator -->
-      <div
-        v-if="isFetchingPlaces"
-        class="bg-white px-3 py-2 rounded-lg shadow-lg animate-pulse"
-      >
-        <div class="flex items-center gap-2">
-          <svg
-            class="animate-spin w-4 h-4 text-primary-500"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              class="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              stroke-width="4"
-            ></circle>
-            <path
-              class="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            ></path>
-          </svg>
-          <span class="text-xs font-medium text-gray-600"
-            >Finding places...</span
-          >
-        </div>
-      </div>
-    </div>
-
-    <!-- Venue Count Badge -->
-    <!-- Position higher when in full-screen mode to avoid bottom navigation -->
-    <div
-      class="absolute left-4 bg-white px-4 py-2 rounded-lg shadow-lg"
-      :class="fullScreen ? 'bottom-20 sm:bottom-24' : 'bottom-4'"
-    >
-      <div class="flex items-center gap-2">
-        <div class="w-3 h-3 bg-primary-500 rounded-full"></div>
-        <span class="text-sm font-medium text-gray-700">
-          {{ venuesStore.activeVenues.length }} active venues
-        </span>
-      </div>
-      <div class="flex items-center gap-2 mt-1">
-        <div class="w-3 h-3 bg-gray-400 rounded-full"></div>
-        <span class="text-sm font-medium text-gray-700">
-          {{ venuesStore.inactiveVenues.length }} nearby venues
-        </span>
-      </div>
-    </div>
-
-    <!-- Invalid Venues Warning -->
-    <div
-      v-if="skippedVenuesCount > 0"
-      class="absolute right-4 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg shadow-lg max-w-xs"
-      :class="fullScreen ? 'bottom-20 sm:bottom-24' : 'bottom-4'"
-    >
-      <div class="flex items-start gap-2">
-        <svg
-          class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-          />
-        </svg>
-        <div>
-          <p class="text-sm font-medium text-amber-800">
-            {{ skippedVenuesCount }} venue{{
-              skippedVenuesCount > 1 ? "s" : ""
-            }}
-            could not be displayed
-          </p>
-          <p class="text-xs text-amber-600 mt-0.5">
-            Some venues have missing location data
-          </p>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
 <style>
-.people-pin {
-  position: absolute;
-  z-index: 1001;
-}
-
-.people-pin svg {
+.venue-pin svg {
   overflow: visible;
-  filter: drop-shadow(0px 4px 10px rgba(0, 0, 0, 0.15));
+  filter: drop-shadow(0px 3px 8px rgba(0, 0, 0, 0.2));
 }
 
-.people-pin.active svg {
-  filter: drop-shadow(0px 6px 14px rgba(0, 80, 255, 0.35));
+.venue-pin.active svg {
+  filter: drop-shadow(0px 4px 12px rgba(0, 80, 255, 0.4));
 }
 </style>

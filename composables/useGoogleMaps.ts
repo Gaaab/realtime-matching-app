@@ -1,48 +1,51 @@
-import { setOptions, importLibrary } from '@googlemaps/js-api-loader'
+import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 
 interface MapOptions {
-  center: google.maps.LatLngLiteral
-  zoom: number
-  mapId?: string
+  center: google.maps.LatLngLiteral;
+  zoom: number;
+  mapId?: string;
 }
 
 export const useGoogleMaps = () => {
-  const config = useRuntimeConfig()
-  const isLoaded = ref(false)
-  const isLoading = ref(false)
-  const error = ref<string | null>(null)
-  let isInitialized = false
+  const config = useRuntimeConfig();
+  const isLoaded = ref(false);
+  const isLoading = ref(false);
+  const error = ref<string | null>(null);
+  let isInitialized = false;
 
   // Initialize Google Maps API options once
   const initializeAPI = () => {
-    if (isInitialized) return
+    if (isInitialized) return;
 
     try {
       setOptions({
         key: config.public.googleMapsApiKey as string,
-        v: 'weekly'
-      })
-      isInitialized = true
+        v: "weekly",
+      });
+      isInitialized = true;
     } catch (err) {
-      console.error('Failed to initialize Google Maps API:', err)
-      error.value = err instanceof Error ? err.message : 'Failed to initialize Google Maps API'
+      console.error("Failed to initialize Google Maps API:", err);
+      error.value =
+        err instanceof Error
+          ? err.message
+          : "Failed to initialize Google Maps API";
     }
-  }
+  };
 
   // Load specific Google Maps libraries
   const loadLibrary = async (libraryName: string): Promise<any> => {
     try {
-      const library = await importLibrary(libraryName)
-      return library
+      const library = await importLibrary(libraryName);
+      return library;
     } catch (err) {
-      console.error(`Failed to load ${libraryName} library:`, err)
-      throw err
+      console.error(`Failed to load ${libraryName} library:`, err);
+      throw err;
     }
-  }
+  };
 
   const loadGoogleMaps = async (): Promise<typeof google.maps | null> => {
     if (isLoaded.value) {
-      return google.maps
+      return google.maps;
     }
 
     if (isLoading.value) {
@@ -50,164 +53,160 @@ export const useGoogleMaps = () => {
       return new Promise((resolve) => {
         const checkInterval = setInterval(() => {
           if (!isLoading.value) {
-            clearInterval(checkInterval)
-            resolve(isLoaded.value ? google.maps : null)
+            clearInterval(checkInterval);
+            resolve(isLoaded.value ? google.maps : null);
           }
-        }, 100)
-      })
+        }, 100);
+      });
     }
 
     try {
-      isLoading.value = true
-      error.value = null
+      isLoading.value = true;
+      error.value = null;
 
       // Initialize API options
-      initializeAPI()
+      initializeAPI();
 
       // Load required libraries
-      await loadLibrary('maps')
-      await loadLibrary('marker')
-      await loadLibrary('places')
+      await loadLibrary("maps");
+      await loadLibrary("marker");
+      await loadLibrary("places");
 
-      isLoaded.value = true
-      isLoading.value = false
-      return google.maps
+      isLoaded.value = true;
+      isLoading.value = false;
+      return google.maps;
     } catch (err) {
-      console.error('Failed to load Google Maps:', err)
-      error.value = err instanceof Error ? err.message : 'Failed to load Google Maps'
-      isLoading.value = false
-      return null
+      console.error("Failed to load Google Maps:", err);
+      error.value =
+        err instanceof Error ? err.message : "Failed to load Google Maps";
+      isLoading.value = false;
+      return null;
     }
-  }
+  };
 
   const createMap = async (
     element: HTMLElement,
-    options: MapOptions
+    options: MapOptions,
   ): Promise<google.maps.Map | null> => {
-    const maps = await loadGoogleMaps()
-    if (!maps) return null
+    const maps = await loadGoogleMaps();
+    if (!maps) return null;
 
     try {
       // Default center (will be overridden by user location)
-      const defaultCenter = { lat: 0, lng: 0 }
+      const defaultCenter = { lat: 0, lng: 0 };
       const map = new maps.Map(element, {
         center: options.center || defaultCenter,
         zoom: options.zoom || 12,
-        mapId: options.mapId || 'VENUE_MAP',
-        disableDefaultUI: false,
+        mapId: options.mapId || (config.public.googleMapsMapId as string),
+        disableDefaultUI: true,
         zoomControl: true,
         mapTypeControl: false,
-        scaleControl: true,
+        scaleControl: false,
         streetViewControl: false,
         rotateControl: false,
-        fullscreenControl: true
-        // No geographic restriction - allow worldwide venues
-      })
+        fullscreenControl: false,
+        clickableIcons: false,
+      });
 
-      return map
+      return map;
     } catch (err) {
-      console.error('Failed to create map:', err)
-      error.value = err instanceof Error ? err.message : 'Failed to create map'
-      return null
+      console.error("Failed to create map:", err);
+      error.value = err instanceof Error ? err.message : "Failed to create map";
+      return null;
     }
-  }
+  };
 
   /**
    * Validates that coordinates are valid numbers within acceptable ranges
    */
   const isValidCoordinate = (lat: number, lng: number): boolean => {
     // Check for NaN, undefined, or non-numeric values
-    if (typeof lat !== 'number' || typeof lng !== 'number') {
-      return false
+    if (typeof lat !== "number" || typeof lng !== "number") {
+      return false;
     }
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      return false
+      return false;
     }
     // Validate ranges
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-      return false
+      return false;
     }
-    return true
-  }
+    return true;
+  };
 
   const createPinMarkerIcon = async (options: any) => {
-    const maps = await loadGoogleMaps()
-    if (!maps) return null
+    const maps = await loadGoogleMaps();
+    if (!maps) return null;
 
-    // Import the marker library
-    const markerLibrary = await loadLibrary('marker')
-    const { PinElement } = markerLibrary
+    const { PinElement } = (await google.maps.importLibrary(
+      "marker",
+    )) as google.maps.MarkerLibrary;
 
-    return new PinElement(options)
-  }
+    return new PinElement(options);
+  };
 
   const createMarker = async (
     map: google.maps.Map,
     position: google.maps.LatLngLiteral,
-    options?: Partial<google.maps.marker.AdvancedMarkerElementOptions>
+    options?: Partial<google.maps.marker.AdvancedMarkerElementOptions>,
   ): Promise<google.maps.marker.AdvancedMarkerElement | null> => {
     try {
       // Validate coordinates before attempting to create marker
       if (!isValidCoordinate(position.lat, position.lng)) {
         console.error(
-          '[useGoogleMaps] Invalid coordinates provided to createMarker:',
+          "[useGoogleMaps] Invalid coordinates provided to createMarker:",
           {
             lat: position.lat,
             lng: position.lng,
             latType: typeof position.lat,
             lngType: typeof position.lng,
             isLatNaN: Number.isNaN(position.lat),
-            isLngNaN: Number.isNaN(position.lng)
-          }
-        )
-        return null
+            isLngNaN: Number.isNaN(position.lng),
+          },
+        );
+        return null;
       }
 
-      const maps = await loadGoogleMaps()
-      if (!maps) return null
+      const maps = await loadGoogleMaps();
+      if (!maps) return null;
 
-      // Import the marker library
-      const markerLibrary = await loadLibrary('marker')
-      const { AdvancedMarkerElement, Marker } = markerLibrary
+      const markerLib = await loadLibrary("marker");
 
-      // Convert LatLngLiteral to proper LatLng object
-      const latLng = new maps.LatLng(position.lat, position.lng)
+      const { AdvancedMarkerElement } = markerLib;
+      if (!AdvancedMarkerElement) {
+        console.error(
+          "[useGoogleMaps] AdvancedMarkerElement not found in marker library",
+        );
+        return null;
+      }
 
-      // Create advanced marker element
-      const marker = new Marker({
+      const marker = new AdvancedMarkerElement({
         map,
-        position: latLng,
-        //position: {
-        //  lat: position.lat,
-        //  lng: position.lng,
-        //},
-        ...options
-      })
+        position,
+        ...options,
+      });
 
-      return marker
+      return marker;
     } catch (err) {
-      console.error('Failed to create marker:', err)
-      return null
+      console.error("Failed to create marker:", err);
+      return null;
     }
-  }
+  };
 
   const fitBounds = (
     map: google.maps.Map,
-    bounds: google.maps.LatLngBounds | google.maps.LatLngBoundsLiteral
+    bounds: google.maps.LatLngBounds | google.maps.LatLngBoundsLiteral,
   ) => {
-    map.fitBounds(bounds)
-  }
+    map.fitBounds(bounds);
+  };
 
-  const panTo = (
-    map: google.maps.Map,
-    position: google.maps.LatLngLiteral
-  ) => {
-    map.panTo(position)
-  }
+  const panTo = (map: google.maps.Map, position: google.maps.LatLngLiteral) => {
+    map.panTo(position);
+  };
 
   const setZoom = (map: google.maps.Map, zoom: number) => {
-    map.setZoom(zoom)
-  }
+    map.setZoom(zoom);
+  };
 
   return {
     isLoaded,
@@ -219,6 +218,6 @@ export const useGoogleMaps = () => {
     createPinMarkerIcon,
     fitBounds,
     panTo,
-    setZoom
-  }
-}
+    setZoom,
+  };
+};
