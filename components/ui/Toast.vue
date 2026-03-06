@@ -35,6 +35,7 @@ const emit = defineEmits<{
         </div>
         <button
           @click="emit('dismiss')"
+          aria-label="Dismiss notification"
           class="flex-shrink-0 p-1 hover:bg-gray-100 rounded-lg transition-colors"
         >
           <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
