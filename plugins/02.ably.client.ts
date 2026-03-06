@@ -4,8 +4,8 @@
  * Initializes Ably client with authentication from backend API
  * Handles token refresh and connection lifecycle
  *
- * IMPORTANT: This plugin depends on the auth plugin being initialized first.
- * It waits for authStore.initialized to be true before connecting.
+ * Loaded after 01.auth.ts via number prefix, so authStore.initialized
+ * is guaranteed to be true when this plugin runs.
  */
 
 import { Realtime, type TokenRequest } from "ably";
@@ -20,21 +20,6 @@ export default defineNuxtPlugin(async () => {
   const authStore = useAuthStore();
 
   try {
-    // Wait for auth initialization to complete
-    // This ensures user data is loaded from storage and profile is fetched
-    let maxWaitTime = 10000; // 10 seconds max wait
-    const waitInterval = 50;
-    while (!authStore.initialized && maxWaitTime > 0) {
-      await new Promise((resolve) => setTimeout(resolve, waitInterval));
-      maxWaitTime -= waitInterval;
-    }
-
-    if (!authStore.initialized) {
-      console.warn(
-        "Ably: Auth not initialized after waiting, proceeding anyway",
-      );
-    }
-
     // If user is not authenticated, don't initialize Ably
     // Real-time features require authentication
     if (!authStore.user?.id) {
