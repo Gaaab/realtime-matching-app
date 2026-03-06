@@ -1,449 +1,371 @@
-import { useChatStore } from '~/stores/chat'
-import type { Channel, Message, SendMessageData, PendingMessage, OnlineUser } from '~/types/chat'
+import { useChatStore } from "~/stores/chat";
+import type {
+  Channel,
+  Message,
+  SendMessageData,
+  PendingMessage,
+  OnlineUser,
+} from "~/types/chat";
+import { createChatRealtimeHandler } from "~/composables/useChatRealtimeHandler";
 
 export const useChat = () => {
-  const api = useApi()
-  const chatStore = useChatStore()
+  const api = useApi();
+  const chatStore = useChatStore();
 
-  // Ably integration
-  const { subscribeToChannel, publishMessage, subscribeToPresence } = useAbly()
-  const processedMessageIds = ref<Set<string>>(new Set())
-  const processingMessageIds = ref<Set<string>>(new Set())
+  const processedMessageIds = ref<Set<string>>(new Set());
+  const processingMessageIds = ref<Set<string>>(new Set());
+
+  // Register realtime event handler for chat events
+  const { registerHandler, unregisterHandler } = useRealtime();
+  const { handler: chatRealtimeHandler } = createChatRealtimeHandler(
+    chatStore,
+    processedMessageIds.value,
+  );
+  registerHandler("chat", chatRealtimeHandler);
 
   const fetchChannels = async () => {
     try {
-      chatStore.setLoading(true)
-      chatStore.setError(null)
+      chatStore.setLoading(true);
+      chatStore.setError(null);
 
-      const response = await api.get<Channel[]>('/chat/channels')
+      const response = await api.get<Channel[]>("/chat/channels");
 
       if (response.success && response.data) {
-        chatStore.setChannels(response.data)
-        return response.data
+        chatStore.setChannels(response.data);
+        return response.data;
       }
 
-      throw new Error(response.message || 'Failed to fetch channels')
+      throw new Error(response.message || "Failed to fetch channels");
     } catch (error: any) {
-      const errorMessage = error.message || 'Failed to fetch channels'
-      chatStore.setError(errorMessage)
-      console.error('Fetch channels error:', error)
-      throw error
+      const errorMessage = error.message || "Failed to fetch channels";
+      chatStore.setError(errorMessage);
+      console.error("Fetch channels error:", error);
+      throw error;
     } finally {
-      chatStore.setLoading(false)
+      chatStore.setLoading(false);
     }
-  }
+  };
 
   const fetchChannel = async (channelId: number) => {
     try {
-      chatStore.setLoading(true)
-      chatStore.setError(null)
+      chatStore.setLoading(true);
+      chatStore.setError(null);
 
-      const response = await api.get<Channel>(`/chat/channels/${channelId}`)
+      const response = await api.get<Channel>(`/chat/channels/${channelId}`);
 
       if (response.success && response.data) {
-        chatStore.addChannel(response.data)
-        chatStore.setCurrentChannel(response.data)
-        return response.data
+        chatStore.addChannel(response.data);
+        chatStore.setCurrentChannel(response.data);
+        return response.data;
       }
 
-      throw new Error(response.message || 'Failed to fetch channel')
+      throw new Error(response.message || "Failed to fetch channel");
     } catch (error: any) {
-      const errorMessage = error.message || 'Failed to fetch channel'
-      chatStore.setError(errorMessage)
-      console.error('Fetch channel error:', error)
-      throw error
+      const errorMessage = error.message || "Failed to fetch channel";
+      chatStore.setError(errorMessage);
+      console.error("Fetch channel error:", error);
+      throw error;
     } finally {
-      chatStore.setLoading(false)
+      chatStore.setLoading(false);
     }
-  }
+  };
 
-  const fetchMessages = async (channelId: number, page: number = 1, limit: number = 50) => {
+  const fetchMessages = async (
+    channelId: number,
+    page: number = 1,
+    limit: number = 50,
+  ) => {
     try {
-      chatStore.setLoading(true)
-      chatStore.setError(null)
+      chatStore.setLoading(true);
+      chatStore.setError(null);
 
-      const response = await api.get<Message[]>(`/chat/channels/${channelId}/messages`, {
-        page,
-        limit,
-      })
+      const response = await api.get<Message[]>(
+        `/chat/channels/${channelId}/messages`,
+        {
+          page,
+          limit,
+        },
+      );
 
       if (response.success && response.data) {
         if (page === 1) {
-          chatStore.setMessages(channelId, response.data)
+          chatStore.setMessages(channelId, response.data);
         } else {
-          chatStore.prependMessages(channelId, response.data)
+          chatStore.prependMessages(channelId, response.data);
         }
-        return response.data
+        return response.data;
       }
 
-      throw new Error(response.message || 'Failed to fetch messages')
+      throw new Error(response.message || "Failed to fetch messages");
     } catch (error: any) {
-      const errorMessage = error.message || 'Failed to fetch messages'
-      chatStore.setError(errorMessage)
-      console.error('Fetch messages error:', error)
-      throw error
+      const errorMessage = error.message || "Failed to fetch messages";
+      chatStore.setError(errorMessage);
+      console.error("Fetch messages error:", error);
+      throw error;
     } finally {
-      chatStore.setLoading(false)
+      chatStore.setLoading(false);
     }
-  }
+  };
 
   const sendMessage = async (channelId: number, data: SendMessageData) => {
     try {
-      const response = await api.post<Message>(`/chat/channels/${channelId}/messages`, data)
+      const response = await api.post<Message>(
+        `/chat/channels/${channelId}/messages`,
+        data,
+      );
 
       if (response.success && response.data) {
-        chatStore.addMessage(channelId, response.data)
-        return response.data
+        chatStore.addMessage(channelId, response.data);
+        return response.data;
       }
 
-      throw new Error(response.message || 'Failed to send message')
+      throw new Error(response.message || "Failed to send message");
     } catch (error: any) {
-      const errorMessage = error.message || 'Failed to send message'
-      chatStore.setError(errorMessage)
-      console.error('Send message error:', error)
-      throw error
+      const errorMessage = error.message || "Failed to send message";
+      chatStore.setError(errorMessage);
+      console.error("Send message error:", error);
+      throw error;
     }
-  }
+  };
 
   const sendTextMessage = async (channelId: number, content: string) => {
-    return await sendMessage(channelId, { content, message_type: 'text' })
-  }
+    return await sendMessage(channelId, { content, message_type: "text" });
+  };
 
-  const sendImageMessage = async (channelId: number, mediaUrl: string, content?: string) => {
+  const sendImageMessage = async (
+    channelId: number,
+    mediaUrl: string,
+    content?: string,
+  ) => {
     return await sendMessage(channelId, {
-      content: content || '',
-      message_type: 'image',
+      content: content || "",
+      message_type: "image",
       media_url: mediaUrl,
-    })
-  }
+    });
+  };
 
   const markMessageAsRead = async (channelId: number, messageId: number) => {
     try {
-      const response = await api.post(`/chat/channels/${channelId}/messages/${messageId}/read`)
+      const response = await api.post(
+        `/chat/channels/${channelId}/messages/${messageId}/read`,
+      );
 
       if (response.success) {
-        chatStore.markMessageAsRead(channelId, messageId)
-        return true
+        chatStore.markMessageAsRead(channelId, messageId);
+        return true;
       }
 
-      throw new Error(response.message || 'Failed to mark message as read')
+      throw new Error(response.message || "Failed to mark message as read");
     } catch (error: any) {
-      console.error('Mark message as read error:', error)
-      throw error
+      console.error("Mark message as read error:", error);
+      throw error;
     }
-  }
+  };
 
   const markChannelAsRead = async (channelId: number) => {
     try {
-      const response = await api.post(`/chat/channels/${channelId}/read`)
+      const response = await api.post(`/chat/channels/${channelId}/read`);
 
       if (response.success) {
-        chatStore.markChannelAsRead(channelId)
-        return true
+        chatStore.markChannelAsRead(channelId);
+        return true;
       }
 
-      throw new Error(response.message || 'Failed to mark channel as read')
+      throw new Error(response.message || "Failed to mark channel as read");
     } catch (error: any) {
-      console.error('Mark channel as read error:', error)
-      throw error
+      console.error("Mark channel as read error:", error);
+      throw error;
     }
-  }
+  };
 
   const deleteMessage = async (channelId: number, messageId: number) => {
     try {
-      const response = await api.delete(`/chat/channels/${channelId}/messages/${messageId}`)
+      const response = await api.delete(
+        `/chat/channels/${channelId}/messages/${messageId}`,
+      );
 
       if (response.success) {
         // Remove message from store
-        const messages = chatStore.messages[channelId] || []
+        const messages = chatStore.messages[channelId] || [];
         chatStore.setMessages(
           channelId,
-          messages.filter(m => m.id !== messageId)
-        )
-        return true
+          messages.filter((m) => m.id !== messageId),
+        );
+        return true;
       }
 
-      throw new Error(response.message || 'Failed to delete message')
+      throw new Error(response.message || "Failed to delete message");
     } catch (error: any) {
-      console.error('Delete message error:', error)
-      throw error
+      console.error("Delete message error:", error);
+      throw error;
     }
-  }
+  };
 
   const createChannelForMatch = async (matchId: number) => {
     try {
-      chatStore.setLoading(true)
-      chatStore.setError(null)
+      chatStore.setLoading(true);
+      chatStore.setError(null);
 
-      const response = await api.post<Channel>('/chat/channels', { match_id: matchId })
+      const response = await api.post<Channel>("/chat/channels", {
+        match_id: matchId,
+      });
 
       if (response.success && response.data) {
-        chatStore.addChannel(response.data)
-        return response.data
+        chatStore.addChannel(response.data);
+        return response.data;
       }
 
-      throw new Error(response.message || 'Failed to create channel')
+      throw new Error(response.message || "Failed to create channel");
     } catch (error: any) {
-      const errorMessage = error.message || 'Failed to create channel'
-      chatStore.setError(errorMessage)
-      console.error('Create channel error:', error)
-      throw error
+      const errorMessage = error.message || "Failed to create channel";
+      chatStore.setError(errorMessage);
+      console.error("Create channel error:", error);
+      throw error;
     } finally {
-      chatStore.setLoading(false)
+      chatStore.setLoading(false);
     }
-  }
+  };
 
-  const setTypingIndicator = (channelId: number, userId: number, isTyping: boolean) => {
-    chatStore.setTypingUser(channelId, userId, isTyping)
-  }
+  const setTypingIndicator = (
+    channelId: number,
+    userId: number,
+    isTyping: boolean,
+  ) => {
+    chatStore.setTypingUser(channelId, userId, isTyping);
+  };
 
   // ============================================================================
-  // ABLY REAL-TIME INTEGRATION
+  // REAL-TIME INTEGRATION (via multiplexed channel)
   // ============================================================================
 
-  /**
-   * Subscribe to channel real-time updates via Ably
-   * Handles message creation, updates, deletions, and typing indicators
-   */
-  const subscribeToChannelUpdates = (channelId: number) => {
-    const unsubscribe = subscribeToChannel(channelId, {
-      onMessage: (event) => {
-        const message = event.data as Message
-        const messageKey = `${message.id}`
+  const subscribeToChannelUpdates = (_channelId: number) => {
+    // No-op: chat events are handled by the global realtime handler
+    chatStore.setChannelSubscribed(_channelId, true);
+    return () => {};
+  };
 
-        // Deduplication: Skip if already processed
-        if (processedMessageIds.value.has(messageKey)) {
-          return
-        }
-
-        processedMessageIds.value.add(messageKey)
-        chatStore.addMessage(channelId, message)
-        console.log(`Real-time message received: ${message.id}`)
-      },
-      onUpdate: (event) => {
-        const updatedMessage = event.data as Message
-        const messages = chatStore.getMessagesByChannel(channelId)
-        if (messages.some((m) => m.id === updatedMessage.id)) {
-          chatStore.addMessage(channelId, updatedMessage)
-        }
-      },
-      onDelete: (event) => {
-        const messageId = event.data.id
-        const messages = chatStore.getMessagesByChannel(channelId)
-        chatStore.setMessages(
-          channelId,
-          messages.filter((m) => m.id !== messageId)
-        )
-      },
-      onError: (err) => {
-        console.error('Ably channel error:', err)
-        chatStore.setError(err.message)
-      }
-    })
-
-    chatStore.setChannelSubscribed(channelId, true)
-    return unsubscribe
-  }
-
-  /**
-   * Open channel with Ably real-time sync
-   * Fetches history, subscribes to updates, loads presence
-   */
   const openChannelWithAbly = async (channelId: number) => {
     try {
-      chatStore.setLoading(true)
-      chatStore.setSyncStatus(channelId, 'syncing')
+      chatStore.setLoading(true);
+      chatStore.setSyncStatus(channelId, "syncing");
 
-      // Fetch message history from API
-      const messagesResponse = await fetchMessages(channelId, 1, 50)
+      const messagesResponse = await fetchMessages(channelId, 1, 50);
       messagesResponse.forEach((msg) => {
-        processedMessageIds.value.add(msg.id.toString())
-      })
+        processedMessageIds.value.add(msg.id.toString());
+      });
 
-      // Subscribe to real-time updates
-      subscribeToChannelUpdates(channelId)
+      // Mark channel as subscribed (events come through global realtime handler)
+      chatStore.setChannelSubscribed(channelId, true);
 
-      // Load online users (presence)
-      await loadChannelPresence(channelId)
-
-      chatStore.setSyncStatus(channelId, 'synced')
-      chatStore.setLastSyncedAt(channelId, new Date().toISOString())
-      console.log(`Channel ${channelId} opened with Ably`)
+      chatStore.setSyncStatus(channelId, "synced");
+      chatStore.setLastSyncedAt(channelId, new Date().toISOString());
     } catch (error: any) {
-      chatStore.setSyncStatus(channelId, 'error')
-      chatStore.setError(error.message)
-      console.error('Error opening channel with Ably:', error)
-      throw error
+      chatStore.setSyncStatus(channelId, "error");
+      chatStore.setError(error.message);
+      throw error;
     } finally {
-      chatStore.setLoading(false)
+      chatStore.setLoading(false);
     }
-  }
+  };
 
-  /**
-   * Load online users (presence) in a channel via Ably
-   */
-  const loadChannelPresence = async (channelId: number) => {
-    try {
-      // Subscribe to presence changes
-      subscribeToPresence(channelId, {
-        onEnter: (member) => {
-          const user: OnlineUser = {
-            id: member.data?.userId || 0,
-            user_id: member.data?.userId || 0,
-            first_name: member.data?.firstName || 'Unknown',
-            profile_picture_url: member.data?.avatar || null,
-            is_online: true,
-            last_seen_at: new Date().toISOString()
-          }
-          chatStore.addOnlineUser(channelId, user)
-        },
-        onUpdate: (member) => {
-          const user: OnlineUser = {
-            id: member.data?.userId || 0,
-            user_id: member.data?.userId || 0,
-            first_name: member.data?.firstName || 'Unknown',
-            profile_picture_url: member.data?.avatar || null,
-            is_online: true,
-            last_seen_at: new Date().toISOString()
-          }
-          chatStore.addOnlineUser(channelId, user)
-        },
-        onLeave: (member) => {
-          const userId = member.data?.userId
-          if (userId) {
-            chatStore.removeOnlineUser(channelId, userId)
-          }
-        }
-      })
-    } catch (err) {
-      console.warn('Failed to load channel presence:', err)
-    }
-  }
+  const loadChannelPresence = async (_channelId: number) => {
+    // Presence is now handled by the presence store via realtime events
+  };
 
-  /**
-   * Publish typing indicator via Ably
-   */
   const publishTypingViaAbly = async (channelId: number, isTyping: boolean) => {
     try {
-      const authStore = useAuthStore()
-      await publishMessage(channelId, 'typing', {
-        userId: authStore.user?.id,
-        isTyping,
-        timestamp: new Date().toISOString()
-      })
-    } catch (err) {
-      console.warn('Failed to publish typing indicator:', err)
-    }
-  }
+      const channel = chatStore.channels.find((c) => c.id === channelId);
+      if (!channel) return;
 
-  /**
-   * Flush queued messages on reconnection
-   */
+      await api.post(`/chat/channels/${channel.id}/typing`, {
+        is_typing: isTyping,
+      });
+    } catch (err) {
+      console.warn("Failed to publish typing indicator:", err);
+    }
+  };
+
   const flushMessageQueue = async (channelId: number) => {
-    const queuedMessages = chatStore.getPendingMessages(channelId)
+    const queuedMessages = chatStore.getPendingMessages(channelId);
 
     if (queuedMessages.length === 0) {
-      return
+      return;
     }
-
-    console.log(`Flushing ${queuedMessages.length} queued messages`)
 
     for (const queuedMsg of queuedMessages) {
       try {
         chatStore.updateQueuedMessage(queuedMsg.clientId, {
-          status: 'sending',
+          status: "sending",
           retryCount: (queuedMsg.retryCount || 0) + 1,
-          lastAttemptAt: new Date().toISOString()
-        })
+          lastAttemptAt: new Date().toISOString(),
+        });
 
         const payload: SendMessageData = {
           content: queuedMsg.content,
           message_type: queuedMsg.messageType as any,
-          media_url: queuedMsg.mediaUrl
-        }
+          media_url: queuedMsg.mediaUrl,
+        };
 
-        await sendMessage(channelId, payload)
-        chatStore.removeMessageFromQueue(queuedMsg.clientId)
+        await sendMessage(channelId, payload);
+        chatStore.removeMessageFromQueue(queuedMsg.clientId);
       } catch (err) {
-        console.warn(`Failed to send queued message:`, err)
+        console.warn(`Failed to send queued message:`, err);
       }
     }
-  }
+  };
 
-  /**
-   * Sync messages after reconnection
-   */
   const syncAfterReconnect = async (channelId: number) => {
-    const lastSyncTime = chatStore.getLastSyncTime(channelId)
+    const lastSyncTime = chatStore.getLastSyncTime(channelId);
 
     if (!lastSyncTime) {
-      return openChannelWithAbly(channelId)
+      return openChannelWithAbly(channelId);
     }
 
     try {
-      chatStore.setSyncStatus(channelId, 'syncing')
+      chatStore.setSyncStatus(channelId, "syncing");
 
-      // Fetch messages since last sync
       const response = await api.get<Message[]>(
         `/chat/channels/${channelId}/messages`,
         {
           since: lastSyncTime,
-          limit: 100
-        }
-      )
+          limit: 100,
+        },
+      );
 
       if (response.success && response.data) {
         response.data.forEach((msg) => {
-          const key = msg.id.toString()
+          const key = msg.id.toString();
           if (!processedMessageIds.value.has(key)) {
-            chatStore.addMessage(channelId, msg)
-            processedMessageIds.value.add(key)
+            chatStore.addMessage(channelId, msg);
+            processedMessageIds.value.add(key);
           }
-        })
+        });
       }
 
-      chatStore.setSyncStatus(channelId, 'synced')
-      chatStore.setLastSyncedAt(channelId, new Date().toISOString())
+      chatStore.setSyncStatus(channelId, "synced");
+      chatStore.setLastSyncedAt(channelId, new Date().toISOString());
 
-      // Flush any queued messages
-      await flushMessageQueue(channelId)
+      await flushMessageQueue(channelId);
     } catch (err) {
-      chatStore.setSyncStatus(channelId, 'error')
-      console.error('Sync after reconnect error:', err)
+      chatStore.setSyncStatus(channelId, "error");
+      console.error("Sync after reconnect error:", err);
     }
-  }
-
-  /**
-   * Legacy subscribe method for backward compatibility
-   * @deprecated Use openChannelWithAbly() instead
-   */
-  const subscribeToChannelLegacy = (channelId: number, callbacks: {
-    onMessage?: (message: Message) => void
-    onTyping?: (userId: number, isTyping: boolean) => void
-    onRead?: (messageId: number) => void
-  }) => {
-    // Provide backward compatibility while migrating to Ably
-    return {
-      unsubscribe: () => {
-        // Cleanup subscription
-      },
-    }
-  }
+  };
 
   const uploadChatImage = async (file: File) => {
     try {
-      const response = await api.uploadFile('/media', file, { type: 'chat' })
+      const response = await api.uploadFile("/media", file, { type: "chat" });
 
       if (response.success && response.data) {
-        return response.data.url
+        return response.data.url;
       }
 
-      throw new Error(response.message || 'Failed to upload image')
+      throw new Error(response.message || "Failed to upload image");
     } catch (error: any) {
-      console.error('Upload chat image error:', error)
-      throw error
+      console.error("Upload chat image error:", error);
+      throw error;
     }
-  }
+  };
 
   return {
     // ========== API METHODS ==========
@@ -460,10 +382,9 @@ export const useChat = () => {
     setTypingIndicator,
     uploadChatImage,
 
-    // ========== ABLY REAL-TIME METHODS ==========
+    // ========== REAL-TIME METHODS ==========
     openChannelWithAbly,
     subscribeToChannelUpdates,
-    subscribeToChannelLegacy,
     loadChannelPresence,
     publishTypingViaAbly,
     flushMessageQueue,
@@ -475,32 +396,32 @@ export const useChat = () => {
     messages: computed(() => {
       return chatStore.currentChannel
         ? chatStore.getMessagesByChannel(chatStore.currentChannel.id)
-        : []
+        : [];
     }),
     onlineUsers: computed(() => {
       return chatStore.currentChannel
         ? chatStore.getOnlineUsers(chatStore.currentChannel.id)
-        : []
+        : [];
     }),
     syncStatus: computed(() => {
       return chatStore.currentChannel
         ? chatStore.getSyncStatus(chatStore.currentChannel.id)
-        : 'syncing'
+        : "syncing";
     }),
     isChannelSynced: computed(() => {
       return chatStore.currentChannel
         ? chatStore.isChannelSynced(chatStore.currentChannel.id)
-        : false
+        : false;
     }),
     hasQueuedMessages: computed(() => chatStore.hasQueuedMessages),
     pendingMessages: computed(() => {
       return chatStore.currentChannel
         ? chatStore.getPendingMessages(chatStore.currentChannel.id)
-        : []
+        : [];
     }),
     loading: computed(() => chatStore.loading),
     error: computed(() => chatStore.error),
     unreadCount: computed(() => chatStore.unreadCount),
     hasUnreadMessages: computed(() => chatStore.hasUnreadMessages),
-  }
-}
+  };
+};
