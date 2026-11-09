@@ -9,6 +9,11 @@
  */
 
 import { Realtime, type TokenRequest } from "ably";
+import { createVenueRealtimeHandler } from "~/composables/useVenueRealtimeHandler";
+import { createMatchRealtimeHandler } from "~/composables/useMatchRealtimeHandler";
+import { createChatRealtimeHandler } from "~/composables/useChatRealtimeHandler";
+import { createNotificationRealtimeHandler } from "~/composables/useNotificationRealtimeHandler";
+import { createPresenceRealtimeHandler } from "~/composables/usePresenceHandler";
 
 declare global {
   interface NuxtApp {
@@ -68,6 +73,35 @@ export default defineNuxtPlugin(async () => {
       logLevel: import.meta.dev ? 1 : 0, // 0=error, 1=warning, 2=info, 3=debug
     });
 
+    // Register all domain realtime handlers once (session-lifetime)
+    const realtime = useRealtime();
+    const venuesStore = useVenuesStore();
+    const matchesStore = useMatchesStore();
+    const chatStore = useChatStore();
+    const notificationsStore = useNotificationsStore();
+    const presenceStore = usePresenceStore();
+
+    realtime.registerHandler(
+      "venue",
+      createVenueRealtimeHandler(venuesStore).handler,
+    );
+    realtime.registerHandler(
+      "user",
+      createMatchRealtimeHandler(matchesStore).handler,
+    );
+    realtime.registerHandler(
+      "chat",
+      createChatRealtimeHandler(chatStore, new Set(), () => {}).handler,
+    );
+    realtime.registerHandler(
+      "user",
+      createNotificationRealtimeHandler(notificationsStore).handler,
+    );
+    realtime.registerHandler(
+      "user",
+      createPresenceRealtimeHandler(presenceStore).handler,
+    );
+
     // Connect to Ably
     ably.connect();
 
@@ -81,8 +115,8 @@ export default defineNuxtPlugin(async () => {
           ablyStore.setConnectionError(null);
           console.log("Ably connected");
 
-          // Subscribe to the multiplexed channel
-          useRealtime().connect();
+          // Subscribe to the multiplexed channel (handlers already registered)
+          realtime.connect();
           break;
 
         case "connecting":

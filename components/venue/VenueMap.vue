@@ -275,12 +275,26 @@ const initializeMap = async () => {
     // Add venue markers (skip fitBounds to keep DEFAULT_ZOOM)
     await updateVenueMarkers(false);
 
-    // Check if user has an active check-in and highlight that marker
-    await venuesStore.fetchCurrentCheckIn();
+    // Highlight cached check-in marker immediately (hydrated from localStorage)
     if (venuesStore.checkedInVenueId) {
       selectedVenueId.value = venuesStore.checkedInVenueId;
       updateMarkerStyle(venuesStore.checkedInVenueId, true);
     }
+
+    // Validate check-in with API in background, update marker if state changed
+    venuesStore.fetchCurrentCheckIn().then(() => {
+      if (venuesStore.checkedInVenueId) {
+        if (selectedVenueId.value !== venuesStore.checkedInVenueId) {
+          if (selectedVenueId.value) updateMarkerStyle(selectedVenueId.value, false);
+          selectedVenueId.value = venuesStore.checkedInVenueId;
+          updateMarkerStyle(venuesStore.checkedInVenueId, true);
+        }
+      } else if (selectedVenueId.value) {
+        // Server says no active check-in — deselect stale marker
+        updateMarkerStyle(selectedVenueId.value, false);
+        selectedVenueId.value = null;
+      }
+    });
 
     // Add bounds change listener to fetch venues when panning/zooming
     // This will update markers without re-centering the map view
@@ -686,9 +700,8 @@ const handleMarkerClick = async (venue: Venue) => {
 
   venuesStore.setSelectedVenue(venue);
 
-  // Fetch users at this venue
-  const activeUserCount = (venue as any).active_user_count || 0;
-  if (activeUserCount > 0) {
+  // Only fetch users if the user is checked in at this venue (API requires check-in)
+  if (venuesStore.checkedInVenueId === venue.id) {
     try {
       await venuesStore.fetchNearbyUsers(venue.id);
     } catch (error) {

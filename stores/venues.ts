@@ -7,6 +7,32 @@ import type {
 } from "~/types/venue";
 import { _sharedLocation } from "~/composables/useLocation";
 
+const CHECKIN_CACHE_KEY = "venue_current_checkin";
+
+function cacheCheckIn(checkIn: VenueCheckIn | null) {
+  if (!process.client) return;
+  if (checkIn) {
+    localStorage.setItem(CHECKIN_CACHE_KEY, JSON.stringify(checkIn));
+  } else {
+    localStorage.removeItem(CHECKIN_CACHE_KEY);
+  }
+}
+
+function loadCachedCheckIn(): VenueCheckIn | null {
+  if (!process.client) return null;
+  try {
+    const raw = localStorage.getItem(CHECKIN_CACHE_KEY);
+    if (!raw) return null;
+    const checkIn = JSON.parse(raw) as VenueCheckIn;
+    // Only restore if it was active (no checked_out_at)
+    if (checkIn.checked_out_at) return null;
+    return checkIn;
+  } catch {
+    localStorage.removeItem(CHECKIN_CACHE_KEY);
+    return null;
+  }
+}
+
 interface VenueState {
   venues: Venue[];
   selectedVenue: Venue | null;
@@ -85,7 +111,7 @@ export const useVenuesStore = defineStore("venues", {
   state: (): VenueState => ({
     venues: [],
     selectedVenue: null,
-    currentCheckIn: null,
+    currentCheckIn: loadCachedCheckIn(),
     nearbyUsers: [],
     isLoadingVenues: false,
     isLoadingUsers: false,
@@ -220,6 +246,7 @@ export const useVenuesStore = defineStore("venues", {
 
         const checkInResult = await checkIn(checkInData);
         this.currentCheckIn = checkInResult;
+        cacheCheckIn(checkInResult);
 
         // After successful check-in, fetch nearby users at this venue
         await this.fetchNearbyUsers(venue.id);
@@ -259,6 +286,7 @@ export const useVenuesStore = defineStore("venues", {
         await checkOut(this.currentCheckIn.id);
 
         this.currentCheckIn = null;
+        cacheCheckIn(null);
         this.nearbyUsers = [];
       } catch (err) {
         console.error("Failed to check out:", err);
@@ -294,17 +322,22 @@ export const useVenuesStore = defineStore("venues", {
 
         if (checkIn) {
           this.currentCheckIn = checkIn;
+          cacheCheckIn(checkIn);
           // If checked in, fetch nearby users
           if (checkIn.venue_id) {
             await this.fetchNearbyUsers(checkIn.venue_id);
           }
+        } else {
+          // Server says not checked in — clear stale cache
+          this.currentCheckIn = null;
+          cacheCheckIn(null);
         }
 
         return checkIn;
       } catch (err) {
         console.error("Failed to fetch current check-in:", err);
-        // Not necessarily an error if user is not checked in
-        return null;
+        // Keep cached value on network failure so UI stays consistent
+        return this.currentCheckIn;
       }
     },
 
@@ -346,6 +379,7 @@ export const useVenuesStore = defineStore("venues", {
       this.venues = [];
       this.selectedVenue = null;
       this.currentCheckIn = null;
+      cacheCheckIn(null);
       this.nearbyUsers = [];
       this.error = null;
     },

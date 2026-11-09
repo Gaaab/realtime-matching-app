@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import type { Message, Channel, OnlineUser } from '~/types/chat'
+import type { Message, Channel } from '~/types/chat'
 
 interface Props {
   channel: Channel | null
   messages: Message[]
-  onlineUsers?: OnlineUser[]
-  currentUserId: number | string
+  currentUserId: number
   isLoading?: boolean
   isSendingMessage?: boolean
   hasMoreMessages?: boolean
@@ -13,7 +12,6 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  onlineUsers: () => [],
   isLoading: false,
   isSendingMessage: false,
   hasMoreMessages: false,
@@ -26,7 +24,7 @@ const emit = defineEmits<{
   typing: [isTyping: boolean]
 }>()
 
-const messageListRef = ref<InstanceType<typeof ChatInput> | null>(null)
+const messageListRef = ref<{ focusInput: () => void } | null>(null)
 
 const handleSendMessage = async (content: string) => {
   emit('send', content)
@@ -40,34 +38,17 @@ const handleTyping = (isTyping: boolean) => {
   emit('typing', isTyping)
 }
 
-// Format channel member count
-const memberCount = computed(() => {
-  return props.onlineUsers.length
-})
-
 // Get recipient name for DM channels
 const recipientName = computed(() => {
   if (!props.channel) return ''
-  if (props.channel.type === 'direct' && props.channel.name) {
-    return props.channel.name
+  if (props.channel.members && props.channel.members.length > 0) {
+    const member = props.channel.members[0]
+    return member.model?.full_name || member.model?.first_name || 'Unknown'
   }
-  return props.channel.name || 'Channel'
+  return 'Conversation'
 })
 
-// Format last activity
-const formatLastActivity = (timestamp: string | null) => {
-  if (!timestamp) return 'offline'
-  const date = new Date(timestamp)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
 
-  if (diffMins < 1) return 'active now'
-  if (diffMins < 60) return `active ${diffMins}m ago`
-  const diffHours = Math.floor(diffMins / 60)
-  if (diffHours < 24) return `active ${diffHours}h ago`
-  return date.toLocaleDateString()
-}
 </script>
 
 <template>
@@ -79,11 +60,8 @@ const formatLastActivity = (timestamp: string | null) => {
     >
       <div>
         <h2 class="text-lg font-bold text-gray-900">{{ recipientName }}</h2>
-        <p v-if="channel.type === 'direct' && onlineUsers.length > 0" class="text-xs text-gray-500">
-          {{ formatLastActivity(onlineUsers[0]?.last_activity_at) }}
-        </p>
-        <p v-else-if="channel.type === 'group'" class="text-xs text-gray-500">
-          {{ memberCount }} members
+        <p v-if="channel.members_count > 2" class="text-xs text-gray-500">
+          {{ channel.members_count }} members
         </p>
       </div>
 

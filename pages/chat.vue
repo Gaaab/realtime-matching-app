@@ -1,30 +1,23 @@
 <script setup lang="ts">
-import type { Channel, Message } from '~/types/chat'
-
 definePageMeta({
   layout: 'dashboard',
   middleware: 'auth'
 })
 
 const { user } = useAuth()
-const { channels, messages, getChannel, getChannelMessages, sendMessage, markChannelAsRead } = useChat()
-const { subscribeToChannelUpdates, openChannelWithAbly, publishTypingViaAbly } = useChat()
+const chat = useChat()
 
 // State
-const selectedChannelId = ref<number | string | null>(null)
+const selectedChannelId = ref<number | null>(null)
 const isLoadingChannels = ref(false)
 const isLoadingMessages = ref(false)
 const isSendingMessage = ref(false)
-const unreadCounts = ref<Record<number | string, number>>({})
-const lastMessages = ref<Record<number | string, Message | null>>({})
-const channelData = ref<Record<number | string, Channel>>({})
 
 // Load channels on mount
 const loadChannels = async () => {
   try {
     isLoadingChannels.value = true
-    // This would typically fetch from your API
-    // For now, channels are populated from the composable
+    await chat.fetchChannels()
   } catch (error) {
     console.error('Failed to load channels:', error)
   } finally {
@@ -33,22 +26,14 @@ const loadChannels = async () => {
 }
 
 // Handle channel selection
-const handleSelectChannel = async (channelId: number | string) => {
+const handleSelectChannel = async (channelId: number) => {
   selectedChannelId.value = channelId
 
   try {
     isLoadingMessages.value = true
 
-    // Open channel with Ably (fetches history, subscribes, loads presence)
-    await openChannelWithAbly(channelId)
-
-    // Mark as read
-    await markChannelAsRead(channelId)
-
-    // Clear unread count
-    if (unreadCounts.value[channelId]) {
-      unreadCounts.value[channelId] = 0
-    }
+    await chat.openChannelWithAbly(channelId)
+    await chat.markChannelAsRead(channelId)
   } catch (error) {
     console.error('Failed to open channel:', error)
   } finally {
@@ -62,35 +47,8 @@ const handleSendMessage = async (content: string) => {
 
   try {
     isSendingMessage.value = true
-
-    const message: Message = {
-      id: `temp-${Date.now()}`,
-      channel_id: selectedChannelId.value as number,
-      user_id: user.value.id,
-      content,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      status: 'pending',
-      user: {
-        id: user.value.id,
-        first_name: user.value.first_name,
-        profile_picture_url: user.value.profile_picture_url
-      }
-    }
-
-    // Optimistic update
-    messages.value.push(message)
-
-    // Send via API and Ably
-    const sent = await sendMessage(selectedChannelId.value, content)
-
-    if (sent) {
-      // Update last message
-      lastMessages.value[selectedChannelId.value] = sent
-
-      // Clear typing indicator
-      await publishTypingViaAbly(selectedChannelId.value, false)
-    }
+    await chat.sendTextMessage(selectedChannelId.value, content)
+    await chat.publishTypingViaAbly(selectedChannelId.value, false)
   } catch (error) {
     console.error('Failed to send message:', error)
   } finally {
@@ -103,7 +61,7 @@ const handleTyping = async (isTyping: boolean) => {
   if (!selectedChannelId.value) return
 
   try {
-    await publishTypingViaAbly(selectedChannelId.value, isTyping)
+    await chat.publishTypingViaAbly(selectedChannelId.value, isTyping)
   } catch (error) {
     console.error('Failed to publish typing indicator:', error)
   }
@@ -123,25 +81,22 @@ const handleLoadMore = async () => {
   }
 }
 
-// Compute current channel
+// Compute current channel from store
 const currentChannel = computed(() => {
   if (!selectedChannelId.value) return null
-  return channelData.value[selectedChannelId.value] || null
+  const chatStore = useChatStore()
+  return chatStore.getChannelById(selectedChannelId.value) || null
 })
 
-// Compute current messages
+// Compute current messages from store
 const currentMessages = computed(() => {
   if (!selectedChannelId.value) return []
-  return messages.value.filter(m => m.channel_id === selectedChannelId.value)
+  const chatStore = useChatStore()
+  return chatStore.getMessagesByChannel(selectedChannelId.value)
 })
 
 onMounted(() => {
   loadChannels()
-})
-
-// Clean up on unmount
-onBeforeUnmount(() => {
-  // TODO: Implement cleanup
 })
 </script>
 
@@ -151,11 +106,10 @@ onBeforeUnmount(() => {
     <!-- Conversations Sidebar -->
     <div class="hidden md:flex md:flex-col md:w-80 md:bg-gray-50 md:border-r md:border-gray-200">
       <ConversationsList
-        :channels="channels"
+        :channels="chat.channels.value"
         :selected-channel-id="selectedChannelId"
         :is-loading="isLoadingChannels"
-        :unread-counts="unreadCounts"
-        :last-messages="lastMessages"
+        :current-user-id="user?.id"
         @select-channel="handleSelectChannel"
       />
     </div>
@@ -192,7 +146,7 @@ onBeforeUnmount(() => {
         v-if="selectedChannelId"
         :channel="currentChannel"
         :messages="currentMessages"
-        :current-user-id="user?.id || ''"
+        :current-user-id="user?.id || 0"
         :is-loading="isLoadingMessages"
         :is-sending-message="isSendingMessage"
         @send="handleSendMessage"

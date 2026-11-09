@@ -1,38 +1,37 @@
-import { defineStore } from 'pinia'
+import { defineStore } from "pinia";
 import type {
   Channel,
   Message,
-  TypingIndicator,
   PendingMessage,
   OnlineUser,
-  SyncStatus
-} from '~/types/chat'
+  SyncStatus,
+} from "~/types/chat";
 
 interface ChatState {
-  channels: Channel[]
-  currentChannel: Channel | null
-  messages: Record<number, Message[]>
-  typingUsers: Record<number, number[]>
-  loading: boolean
-  error: string | null
-  unreadCount: number
+  channels: Channel[];
+  currentChannel: Channel | null;
+  messages: Record<number, Message[]>;
+  typingUsers: Record<number, number[]>;
+  loading: boolean;
+  error: string | null;
+  unreadCount: number;
 
   // ABLY: Message queue for offline messages
-  messageQueue: PendingMessage[]
+  messageQueue: PendingMessage[];
 
   // ABLY: Subscription management
-  subscriptions: Record<number, boolean> // Track which channels we're subscribed to
+  subscriptions: Record<number, boolean>; // Track which channels we're subscribed to
 
   // ABLY: Sync status per channel
-  syncStatus: Record<number, SyncStatus>
-  lastSyncedAt: Record<number, string> // ISO timestamp
+  syncStatus: Record<number, SyncStatus>;
+  lastSyncedAt: Record<number, string>; // ISO timestamp
 
   // ABLY: Online users and presence
-  onlineUsers: Record<number, OnlineUser[]> // Per-channel online users
-  userOnlineStatus: number // OnlineStatus enum value
+  onlineUsers: Record<number, OnlineUser[]>; // Per-channel online users
+  userOnlineStatus: number; // OnlineStatus enum value
 }
 
-export const useChatStore = defineStore('chat', {
+export const useChatStore = defineStore("chat", {
   state: (): ChatState => ({
     channels: [],
     currentChannel: null,
@@ -54,36 +53,37 @@ export const useChatStore = defineStore('chat', {
 
     // ABLY: Online presence
     onlineUsers: {},
-    userOnlineStatus: 1 // Active by default
+    userOnlineStatus: 1, // Active by default
   }),
 
   getters: {
     getChannelById: (state) => {
-      return (channelId: number) => state.channels.find(ch => ch.id === channelId)
+      return (channelId: number) =>
+        state.channels.find((ch) => ch.id === channelId);
     },
 
     getMessagesByChannel: (state) => {
-      return (channelId: number) => state.messages[channelId] || []
+      return (channelId: number) => state.messages[channelId] || [];
     },
 
     getTypingUsersInChannel: (state) => {
-      return (channelId: number) => state.typingUsers[channelId] || []
+      return (channelId: number) => state.typingUsers[channelId] || [];
     },
 
     sortedChannels: (state) => {
       return [...state.channels].sort((a, b) => {
-        const aTime = a.last_message?.created_at || a.created_at
-        const bTime = b.last_message?.created_at || b.created_at
-        return new Date(bTime).getTime() - new Date(aTime).getTime()
-      })
+        const aTime = a.last_message?.created_at || a.created_at;
+        const bTime = b.last_message?.created_at || b.created_at;
+        return new Date(bTime).getTime() - new Date(aTime).getTime();
+      });
     },
 
     hasUnreadMessages: (state) => state.unreadCount > 0,
 
     totalUnreadCount: (state) => {
       return state.channels.reduce((total, channel) => {
-        return total + (channel.unread_count || 0)
-      }, 0)
+        return total + (channel.unread_count || 0);
+      }, 0);
     },
 
     // ========== ABLY GETTERS ==========
@@ -97,190 +97,200 @@ export const useChatStore = defineStore('chat', {
      * Get pending messages for a specific channel
      */
     getPendingMessages: (state) => (channelId: number) => {
-      return state.messageQueue.filter((msg) => msg.channelId === channelId)
+      return state.messageQueue.filter((msg) => msg.channelId === channelId);
     },
 
     /**
      * Get sync status for a channel
      */
     getSyncStatus: (state) => (channelId: number) => {
-      return state.syncStatus[channelId] || 'syncing'
+      return state.syncStatus[channelId] || "syncing";
     },
 
     /**
      * Check if channel is fully synced
      */
     isChannelSynced: (state) => (channelId: number) => {
-      return state.syncStatus[channelId] === 'synced'
+      return state.syncStatus[channelId] === "synced";
     },
 
     /**
      * Check if subscribed to channel updates
      */
     isChannelSubscribed: (state) => (channelId: number) => {
-      return state.subscriptions[channelId] || false
+      return state.subscriptions[channelId] || false;
     },
 
     /**
      * Get online users in a specific channel
      */
     getOnlineUsers: (state) => (channelId: number) => {
-      return state.onlineUsers[channelId] || []
+      return state.onlineUsers[channelId] || [];
     },
 
     /**
      * Get count of online users in a channel
      */
     getOnlineUserCount: (state) => (channelId: number) => {
-      return (state.onlineUsers[channelId] || []).length
+      return (state.onlineUsers[channelId] || []).length;
     },
 
     /**
      * Get last sync time for a channel
      */
     getLastSyncTime: (state) => (channelId: number) => {
-      return state.lastSyncedAt[channelId] || null
-    }
+      return state.lastSyncedAt[channelId] || null;
+    },
   },
 
   actions: {
     setChannels(channels: Channel[]) {
-      this.channels = channels
-      this.calculateUnreadCount()
+      this.channels = channels;
+      this.calculateUnreadCount();
     },
 
     addChannel(channel: Channel) {
-      const existingIndex = this.channels.findIndex(ch => ch.id === channel.id)
+      const existingIndex = this.channels.findIndex(
+        (ch) => ch.id === channel.id,
+      );
       if (existingIndex >= 0) {
-        this.channels[existingIndex] = channel
+        this.channels[existingIndex] = channel;
       } else {
-        this.channels.unshift(channel)
+        this.channels.unshift(channel);
       }
-      this.calculateUnreadCount()
+      this.calculateUnreadCount();
     },
 
     updateChannel(channelId: number, data: Partial<Channel>) {
-      const index = this.channels.findIndex(ch => ch.id === channelId)
+      const index = this.channels.findIndex((ch) => ch.id === channelId);
       if (index >= 0) {
-        this.channels[index] = { ...this.channels[index], ...data }
-        this.calculateUnreadCount()
+        this.channels[index] = { ...this.channels[index], ...data };
+        this.calculateUnreadCount();
       }
     },
 
     setCurrentChannel(channel: Channel | null) {
-      this.currentChannel = channel
+      this.currentChannel = channel;
     },
 
     setMessages(channelId: number, messages: Message[]) {
-      this.messages[channelId] = messages
+      this.messages[channelId] = messages;
     },
 
     addMessage(channelId: number, message: Message) {
       if (!this.messages[channelId]) {
-        this.messages[channelId] = []
+        this.messages[channelId] = [];
       }
 
-      const existingIndex = this.messages[channelId].findIndex(m => m.id === message.id)
+      const existingIndex = this.messages[channelId].findIndex(
+        (m) => m.id === message.id,
+      );
       if (existingIndex >= 0) {
-        this.messages[channelId][existingIndex] = message
+        this.messages[channelId][existingIndex] = message;
       } else {
-        this.messages[channelId].push(message)
+        this.messages[channelId].push(message);
       }
 
       // Update channel's last message
-      const channelIndex = this.channels.findIndex(ch => ch.id === channelId)
+      const channelIndex = this.channels.findIndex((ch) => ch.id === channelId);
       if (channelIndex >= 0) {
-        this.channels[channelIndex].last_message = message
+        this.channels[channelIndex].last_message = message;
       }
 
-      this.sortMessagesInChannel(channelId)
+      this.sortMessagesInChannel(channelId);
     },
 
     prependMessages(channelId: number, messages: Message[]) {
       if (!this.messages[channelId]) {
-        this.messages[channelId] = []
+        this.messages[channelId] = [];
       }
 
-      const existingIds = new Set(this.messages[channelId].map(m => m.id))
-      const newMessages = messages.filter(m => !existingIds.has(m.id))
+      const existingIds = new Set(this.messages[channelId].map((m) => m.id));
+      const newMessages = messages.filter((m) => !existingIds.has(m.id));
 
-      this.messages[channelId] = [...newMessages, ...this.messages[channelId]]
-      this.sortMessagesInChannel(channelId)
+      this.messages[channelId] = [...newMessages, ...this.messages[channelId]];
+      this.sortMessagesInChannel(channelId);
     },
 
     sortMessagesInChannel(channelId: number) {
       if (this.messages[channelId]) {
         this.messages[channelId].sort((a, b) => {
-          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        })
+          return (
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+        });
       }
     },
 
     markMessageAsRead(channelId: number, messageId: number) {
       if (this.messages[channelId]) {
-        const message = this.messages[channelId].find(m => m.id === messageId)
-        if (message && !message.read_at) {
-          message.read_at = new Date().toISOString()
+        const message = this.messages[channelId].find(
+          (m) => m.id === messageId,
+        );
+        if (message && !message.is_read) {
+          message.is_read = true;
         }
       }
     },
 
     markChannelAsRead(channelId: number) {
-      const channel = this.channels.find(ch => ch.id === channelId)
+      const channel = this.channels.find((ch) => ch.id === channelId);
       if (channel) {
-        channel.unread_count = 0
-        this.calculateUnreadCount()
+        channel.unread_count = 0;
+        this.calculateUnreadCount();
       }
 
       if (this.messages[channelId]) {
-        this.messages[channelId].forEach(message => {
-          if (!message.read_at) {
-            message.read_at = new Date().toISOString()
+        this.messages[channelId].forEach((message) => {
+          if (!message.is_read) {
+            message.is_read = true;
           }
-        })
+        });
       }
     },
 
     setTypingUser(channelId: number, userId: number, isTyping: boolean) {
       if (!this.typingUsers[channelId]) {
-        this.typingUsers[channelId] = []
+        this.typingUsers[channelId] = [];
       }
 
       if (isTyping) {
         if (!this.typingUsers[channelId].includes(userId)) {
-          this.typingUsers[channelId].push(userId)
+          this.typingUsers[channelId].push(userId);
         }
       } else {
-        this.typingUsers[channelId] = this.typingUsers[channelId].filter(id => id !== userId)
+        this.typingUsers[channelId] = this.typingUsers[channelId].filter(
+          (id) => id !== userId,
+        );
       }
     },
 
     setLoading(loading: boolean) {
-      this.loading = loading
+      this.loading = loading;
     },
 
     setError(error: string | null) {
-      this.error = error
+      this.error = error;
     },
 
     calculateUnreadCount() {
       this.unreadCount = this.channels.reduce((total, channel) => {
-        return total + (channel.unread_count || 0)
-      }, 0)
+        return total + (channel.unread_count || 0);
+      }, 0);
     },
 
     clearMessages(channelId: number) {
-      delete this.messages[channelId]
-      delete this.typingUsers[channelId]
+      delete this.messages[channelId];
+      delete this.typingUsers[channelId];
     },
 
     clearChat() {
-      this.channels = []
-      this.currentChannel = null
-      this.messages = {}
-      this.typingUsers = {}
-      this.error = null
-      this.unreadCount = 0
+      this.channels = [];
+      this.currentChannel = null;
+      this.messages = {};
+      this.typingUsers = {};
+      this.error = null;
+      this.unreadCount = 0;
     },
 
     // ========== ABLY ACTIONS ==========
@@ -289,7 +299,7 @@ export const useChatStore = defineStore('chat', {
      * Add message to offline queue
      */
     addMessageToQueue(message: PendingMessage) {
-      this.messageQueue.push(message)
+      this.messageQueue.push(message);
     },
 
     /**
@@ -297,8 +307,8 @@ export const useChatStore = defineStore('chat', {
      */
     removeMessageFromQueue(clientId: string) {
       this.messageQueue = this.messageQueue.filter(
-        (msg) => msg.clientId !== clientId
-      )
+        (msg) => msg.clientId !== clientId,
+      );
     },
 
     /**
@@ -306,30 +316,29 @@ export const useChatStore = defineStore('chat', {
      */
     clearMessageQueue(channelId: number) {
       this.messageQueue = this.messageQueue.filter(
-        (msg) => msg.channelId !== channelId
-      )
+        (msg) => msg.channelId !== channelId,
+      );
     },
 
     /**
      * Clear entire message queue
      */
     clearAllQueuedMessages() {
-      this.messageQueue = []
+      this.messageQueue = [];
     },
 
     /**
      * Update message in queue (for retry count, status)
      */
-    updateQueuedMessage(
-      clientId: string,
-      updates: Partial<PendingMessage>
-    ) {
-      const index = this.messageQueue.findIndex((msg) => msg.clientId === clientId)
+    updateQueuedMessage(clientId: string, updates: Partial<PendingMessage>) {
+      const index = this.messageQueue.findIndex(
+        (msg) => msg.clientId === clientId,
+      );
       if (index >= 0) {
         this.messageQueue[index] = {
           ...this.messageQueue[index],
-          ...updates
-        }
+          ...updates,
+        };
       }
     },
 
@@ -337,28 +346,28 @@ export const useChatStore = defineStore('chat', {
      * Mark channel as subscribed
      */
     setChannelSubscribed(channelId: number, subscribed: boolean) {
-      this.subscriptions[channelId] = subscribed
+      this.subscriptions[channelId] = subscribed;
     },
 
     /**
      * Set sync status for a channel
      */
     setSyncStatus(channelId: number, status: SyncStatus) {
-      this.syncStatus[channelId] = status
+      this.syncStatus[channelId] = status;
     },
 
     /**
      * Update last sync timestamp for a channel
      */
     setLastSyncedAt(channelId: number, timestamp: string) {
-      this.lastSyncedAt[channelId] = timestamp
+      this.lastSyncedAt[channelId] = timestamp;
     },
 
     /**
      * Set online users for a channel
      */
     setOnlineUsers(channelId: number, users: OnlineUser[]) {
-      this.onlineUsers[channelId] = users
+      this.onlineUsers[channelId] = users;
     },
 
     /**
@@ -366,16 +375,16 @@ export const useChatStore = defineStore('chat', {
      */
     addOnlineUser(channelId: number, user: OnlineUser) {
       if (!this.onlineUsers[channelId]) {
-        this.onlineUsers[channelId] = []
+        this.onlineUsers[channelId] = [];
       }
 
       const existingIndex = this.onlineUsers[channelId].findIndex(
-        (u) => u.user_id === user.user_id
-      )
+        (u) => u.model_id === user.model_id,
+      );
       if (existingIndex >= 0) {
-        this.onlineUsers[channelId][existingIndex] = user
+        this.onlineUsers[channelId][existingIndex] = user;
       } else {
-        this.onlineUsers[channelId].push(user)
+        this.onlineUsers[channelId].push(user);
       }
     },
 
@@ -385,8 +394,8 @@ export const useChatStore = defineStore('chat', {
     removeOnlineUser(channelId: number, userId: number) {
       if (this.onlineUsers[channelId]) {
         this.onlineUsers[channelId] = this.onlineUsers[channelId].filter(
-          (u) => u.user_id !== userId
-        )
+          (u) => u.model_id !== userId,
+        );
       }
     },
 
@@ -394,14 +403,14 @@ export const useChatStore = defineStore('chat', {
      * Clear online users for a channel
      */
     clearOnlineUsers(channelId: number) {
-      delete this.onlineUsers[channelId]
+      delete this.onlineUsers[channelId];
     },
 
     /**
      * Set current user's online status
      */
     setUserOnlineStatus(status: number) {
-      this.userOnlineStatus = status
-    }
+      this.userOnlineStatus = status;
+    },
   },
-})
+});

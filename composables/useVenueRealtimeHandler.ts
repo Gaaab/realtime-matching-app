@@ -9,9 +9,7 @@ export function createVenueRealtimeHandler(
     const venueId = event.id ? parseInt(event.id, 10) : null;
     if (!venueId || isNaN(venueId)) return;
 
-    const isRelevantVenue =
-      venuesStore.selectedVenue?.id === venueId ||
-      venuesStore.checkedInVenueId === venueId;
+    const isCheckedInHere = venuesStore.checkedInVenueId === venueId;
 
     switch (event.action) {
       case "user_checked_in": {
@@ -19,10 +17,11 @@ export function createVenueRealtimeHandler(
         venuesStore.updateVenueUserCount(venueId, 1);
 
         // Update nearbyUsers list for selected/checked-in venue
-        if (isRelevantVenue) {
+        if (isCheckedInHere) {
           const user = envelope.data as NearbyUser;
+          const userId = user.id || user.user_id;
           const exists = venuesStore.nearbyUsers.find(
-            (u) => u.user_id === user.user_id,
+            (u) => (u.id || u.user_id) === userId,
           );
           if (!exists) {
             venuesStore.nearbyUsers.push(user);
@@ -35,10 +34,10 @@ export function createVenueRealtimeHandler(
         venuesStore.updateVenueUserCount(venueId, -1);
 
         // Update nearbyUsers list for selected/checked-in venue
-        if (isRelevantVenue) {
-          const userId = envelope.data.user_id;
+        if (isCheckedInHere) {
+          const userId = envelope.data.user_id || envelope.data.id;
           venuesStore.nearbyUsers = venuesStore.nearbyUsers.filter(
-            (u) => u.user_id !== userId,
+            (u) => (u.id || u.user_id) !== userId,
           );
         }
         break;

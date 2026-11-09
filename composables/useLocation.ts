@@ -8,6 +8,19 @@ export const _sharedLocation = ref<Coordinates | null>(null);
 const _lastReportedLocation = ref<Coordinates | null>(null);
 const _watchId = ref<number | null>(null);
 
+function getBackendLocation(): Coordinates | null {
+  try {
+    const authStore = useAuthStore();
+    const loc = authStore.userProfile?.location;
+    if (loc?.latitude != null && loc?.longitude != null) {
+      return { latitude: loc.latitude, longitude: loc.longitude };
+    }
+  } catch {
+    // Auth store may not be available yet
+  }
+  return null;
+}
+
 export const useLocation = () => {
   const currentLocation = ref<Coordinates | null>(null);
   const loading = ref(false);
@@ -59,12 +72,27 @@ export const useLocation = () => {
     return true;
   };
 
+  const applyBackendFallback = (): Coordinates | null => {
+    const fallback = getBackendLocation();
+    if (fallback) {
+      console.info("[Location] Using backend profile location as fallback");
+      currentLocation.value = fallback;
+      _sharedLocation.value = fallback;
+      error.value = null;
+    }
+    return fallback;
+  };
+
   const getCurrentPosition = async (): Promise<Coordinates | null> => {
     return new Promise((resolve, reject) => {
       if (!isSupported.value) {
-        error.value = "Geolocation is not supported by your browser";
-        permissionDenied.value = true;
-        resolve(null);
+        const fallback = applyBackendFallback();
+        if (!fallback) {
+          error.value = "Geolocation is not supported by your browser";
+          permissionDenied.value = true;
+        }
+        loading.value = false;
+        resolve(fallback);
         return;
       }
 
@@ -85,24 +113,28 @@ export const useLocation = () => {
         },
         (err) => {
           loading.value = false;
+          console.error("Geolocation error:", err);
 
-          // Handle different error codes
+          // Try backend profile location as fallback
+          const fallback = applyBackendFallback();
+          if (fallback) {
+            resolve(fallback);
+            return;
+          }
+
+          // No fallback available — set error
           if (err.code === 1) {
-            // PERMISSION_DENIED
             permissionDenied.value = true;
             error.value =
               "Location permission denied. Please enable it in your browser settings.";
           } else if (err.code === 2) {
-            // POSITION_UNAVAILABLE
             error.value = "Location information is unavailable.";
           } else if (err.code === 3) {
-            // TIMEOUT
             error.value = "Location request timed out.";
           } else {
             error.value = `Error getting location: ${err.message}`;
           }
 
-          console.error("Geolocation error:", err);
           resolve(null);
         },
         {
@@ -157,7 +189,10 @@ export const useLocation = () => {
   const startLocationTracking = () => {
     if (_watchId.value !== null) return; // Already tracking
     if (!navigator?.geolocation) {
-      console.warn("Geolocation not available, location tracking disabled");
+      console.warn(
+        "Geolocation not available, falling back to backend location",
+      );
+      applyBackendFallback();
       return;
     }
 
@@ -191,6 +226,7 @@ export const useLocation = () => {
       },
       (err) => {
         console.error("Location tracking error:", err);
+        applyBackendFallback();
       },
       {
         enableHighAccuracy: true,

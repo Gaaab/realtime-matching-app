@@ -7,20 +7,23 @@ const props = defineProps<{
 
 const { sendReveal, isLoading: isSendingReveal } = useMatches()
 const revealSent = ref(false)
-const revealPending = ref(false)
 const error = ref<string | null>(null)
+
+const isRevealed = computed(() => props.user.is_revealed === true)
+const hasRevealPending = computed(() => {
+  return revealSent.value || props.user.reveal_direction === 'sent'
+})
 
 const handleSendReveal = async () => {
   try {
     error.value = null
-    await sendReveal(props.user.id, props.user.venue?.id)
+    const userId = props.user.id
+    await sendReveal(userId, props.user.venue?.id)
     revealSent.value = true
-    revealPending.value = true
   } catch (err: any) {
     console.error('Failed to send reveal:', err)
-    // Check if reveal was already sent
     if (err.message?.includes('already') || err.message?.includes('pending')) {
-      revealPending.value = true
+      revealSent.value = true
       error.value = null
     } else {
       error.value = err instanceof Error ? err.message : 'Failed to send reveal'
@@ -50,10 +53,10 @@ const formatCheckedInTime = (timestamp: string) => {
         <!-- Blurred Avatar using BlurredAvatar component -->
         <div class="flex-shrink-0">
           <UiBlurredAvatar
-            :src="user.profile_picture_url"
+            :src="user.avatar_url || user.avatar || user.profile_picture_url"
             :name="user.first_name"
             size="lg"
-            :blurred="!revealSent"
+            :blurred="!isRevealed"
           />
         </div>
 
@@ -73,7 +76,7 @@ const formatCheckedInTime = (timestamp: string) => {
           </div>
 
           <!-- Reveal prompt -->
-          <p v-if="!revealSent && !revealPending" class="text-xs text-primary-600 mt-2 font-medium flex items-center gap-1">
+          <p v-if="!hasRevealPending && !isRevealed" class="text-xs text-primary-600 mt-2 font-medium flex items-center gap-1">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
@@ -87,7 +90,7 @@ const formatCheckedInTime = (timestamp: string) => {
       <div class="mt-4">
         <!-- Reveal Button -->
         <button
-          v-if="!revealSent && !revealPending"
+          v-if="!hasRevealPending && !isRevealed"
           @click="handleSendReveal"
           :disabled="isSendingReveal"
           class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-xl font-semibold text-sm hover:from-primary-600 hover:to-primary-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
@@ -108,15 +111,26 @@ const formatCheckedInTime = (timestamp: string) => {
           </template>
         </button>
 
-        <!-- Success State -->
+        <!-- Pending State -->
         <div
-          v-else-if="revealSent || revealPending"
+          v-else-if="hasRevealPending && !isRevealed"
+          class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 text-amber-700 rounded-xl font-medium text-sm"
+        >
+          <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>Reveal Request Sent</span>
+        </div>
+
+        <!-- Revealed State -->
+        <div
+          v-else-if="isRevealed"
           class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-700 rounded-xl font-medium text-sm"
         >
           <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <span>Reveal Request Sent</span>
+          <span>Profile Revealed</span>
         </div>
       </div>
 

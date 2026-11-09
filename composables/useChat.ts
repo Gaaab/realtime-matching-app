@@ -4,9 +4,7 @@ import type {
   Message,
   SendMessageData,
   PendingMessage,
-  OnlineUser,
 } from "~/types/chat";
-import { createChatRealtimeHandler } from "~/composables/useChatRealtimeHandler";
 
 export const useChat = () => {
   const api = useApi();
@@ -23,19 +21,6 @@ export const useChat = () => {
       processedMessageIds.value.delete(iterator.next().value!);
     }
   };
-
-  // Register realtime event handler for chat events
-  const { registerHandler, unregisterHandler } = useRealtime();
-  const { handler: chatRealtimeHandler } = createChatRealtimeHandler(
-    chatStore,
-    processedMessageIds.value,
-    trackProcessedId,
-  );
-  registerHandler("chat", chatRealtimeHandler);
-
-  onBeforeUnmount(() => {
-    unregisterHandler("chat", chatRealtimeHandler);
-  });
 
   const fetchChannels = async () => {
     try {
@@ -128,9 +113,9 @@ export const useChat = () => {
         data,
       );
 
-      if (response.success && response.data) {
-        chatStore.addMessage(channelId, response.data);
-        return response.data;
+      // API returns empty data on success; message arrives via realtime
+      if (response.success) {
+        return response.data || null;
       }
 
       throw new Error(response.message || "Failed to send message");
@@ -143,19 +128,7 @@ export const useChat = () => {
   };
 
   const sendTextMessage = async (channelId: number, content: string) => {
-    return await sendMessage(channelId, { content, message_type: "text" });
-  };
-
-  const sendImageMessage = async (
-    channelId: number,
-    mediaUrl: string,
-    content?: string,
-  ) => {
-    return await sendMessage(channelId, {
-      content: content || "",
-      message_type: "image",
-      media_url: mediaUrl,
-    });
+    return await sendMessage(channelId, { data: content });
   };
 
   const markMessageAsRead = async (channelId: number, messageId: number) => {
@@ -315,9 +288,7 @@ export const useChat = () => {
         });
 
         const payload: SendMessageData = {
-          content: queuedMsg.content,
-          message_type: queuedMsg.messageType as any,
-          media_url: queuedMsg.mediaUrl,
+          data: queuedMsg.content,
         };
 
         await sendMessage(channelId, payload);
@@ -388,7 +359,6 @@ export const useChat = () => {
     fetchMessages,
     sendMessage,
     sendTextMessage,
-    sendImageMessage,
     markMessageAsRead,
     markChannelAsRead,
     deleteMessage,

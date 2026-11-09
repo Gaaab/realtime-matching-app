@@ -6,21 +6,10 @@ import type {
   MatchFilters,
 } from "~/types/match";
 import type { PaginatedResponse } from "~/types/api";
-import { createMatchRealtimeHandler } from "~/composables/useMatchRealtimeHandler";
 
 export const useMatches = () => {
   const api = useApi();
   const matchesStore = useMatchesStore();
-
-  // Register realtime event handler for match events
-  const { registerHandler, unregisterHandler } = useRealtime();
-  const { handler: matchRealtimeHandler } =
-    createMatchRealtimeHandler(matchesStore);
-  registerHandler("user", matchRealtimeHandler);
-
-  onBeforeUnmount(() => {
-    unregisterHandler("user", matchRealtimeHandler);
-  });
 
   const fetchMatches = async (
     filters?: Partial<MatchFilters>,

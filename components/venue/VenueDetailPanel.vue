@@ -329,9 +329,9 @@ const openDirections = () => {
         </div>
 
         <!-- Active Users Count (Before Check-in) -->
-        <div v-if="!isCheckedInHere && nearbyUsers.length > 0" class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+        <div v-if="!isCheckedInHere && activeUserCount > 0" class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <p class="text-sm text-blue-900 font-semibold mb-1">People Already Here</p>
-          <p class="text-lg font-bold text-blue-600">{{ nearbyUsers.length }} {{ nearbyUsers.length === 1 ? 'person' : 'people' }}</p>
+          <p class="text-lg font-bold text-blue-600">{{ activeUserCount }} {{ activeUserCount === 1 ? 'person' : 'people' }}</p>
         </div>
 
         <!-- Check-in Button -->

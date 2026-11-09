@@ -67,6 +67,7 @@ export const useApi = () => {
 
   const handleResponse = async <T>(
     response: Response,
+    endpoint: string,
   ): Promise<ApiResponse<T>> => {
     const contentType = response.headers.get("content-type");
 
@@ -75,6 +76,19 @@ export const useApi = () => {
     }
 
     const data = await response.json();
+
+    // Auto-logout on 401 from auth/profile endpoints
+    if (
+      response.status === 401 &&
+      (endpoint.startsWith("/auth") || endpoint.startsWith("/profile"))
+    ) {
+      if (process.client) {
+        const authStore = useAuthStore();
+        authStore.logout();
+        localStorage.removeItem("auth_user");
+        navigateTo("/login");
+      }
+    }
 
     if (!response.ok) {
       const error: ApiError = {
@@ -106,7 +120,7 @@ export const useApi = () => {
         },
       });
 
-      return await handleResponse<T>(response);
+      return await handleResponse<T>(response, endpoint);
     } catch (error) {
       if (error && typeof error === "object" && "http_status" in error) {
         throw error;
@@ -203,7 +217,7 @@ export const useApi = () => {
         body: formData,
       });
 
-      return await handleResponse<T>(response);
+      return await handleResponse<T>(response, endpoint);
     } catch (error) {
       if (error && typeof error === "object" && "http_status" in error) {
         throw error;

@@ -1,22 +1,13 @@
-import { usePresenceStore } from '~/stores/presence'
-import { createPresenceRealtimeHandler } from '~/composables/usePresenceHandler'
+import { usePresenceStore } from "~/stores/presence";
 
 export const usePresence = () => {
-  const presenceStore = usePresenceStore()
-  const { registerHandler, unregisterHandler } = useRealtime()
+  const presenceStore = usePresenceStore();
 
-  const { handler: presenceRealtimeHandler } = createPresenceRealtimeHandler(presenceStore)
-  registerHandler('user', presenceRealtimeHandler)
-
-  const isOnline = (userId: number) => presenceStore.isOnline(userId)
-  const getPresence = (userId: number) => presenceStore.getPresence(userId)
-
-  onBeforeUnmount(() => {
-    unregisterHandler('user', presenceRealtimeHandler)
-  })
+  const isOnline = (userId: number) => presenceStore.isOnline(userId);
+  const getPresence = (userId: number) => presenceStore.getPresence(userId);
 
   return {
     isOnline,
     getPresence,
-  }
-}
+  };
+};

@@ -1,12 +1,9 @@
 import { useNotificationsStore } from "~/stores/notifications";
-import { createNotificationRealtimeHandler } from "~/composables/useNotificationRealtimeHandler";
 import type { AppNotification } from "~/types/notification";
 
 export const useNotifications = () => {
   const api = useApi();
   const notificationsStore = useNotificationsStore();
-  const { registerHandler, unregisterHandler } = useRealtime();
-
   // Toast state
   const activeToast = ref<AppNotification | null>(null);
   let toastTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -23,18 +20,6 @@ export const useNotifications = () => {
     activeToast.value = null;
     if (toastTimeout) clearTimeout(toastTimeout);
   };
-
-  const { handler: notificationRealtimeHandler } =
-    createNotificationRealtimeHandler(notificationsStore);
-
-  const wrappedHandler = (event: any, envelope: any) => {
-    const notification = notificationRealtimeHandler(event, envelope);
-    if (notification) {
-      showToast(notification);
-    }
-  };
-
-  registerHandler("user", wrappedHandler);
 
   const fetchNotifications = async () => {
     try {
@@ -67,11 +52,6 @@ export const useNotifications = () => {
       console.error("Mark all notifications read error:", error);
     }
   };
-
-  onBeforeUnmount(() => {
-    unregisterHandler("user", wrappedHandler);
-    if (toastTimeout) clearTimeout(toastTimeout);
-  });
 
   return {
     activeToast: computed(() => activeToast.value),

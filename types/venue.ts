@@ -67,16 +67,32 @@ export interface VenueCheckIn {
 
 export interface NearbyUser {
   id: number;
-  user_id: number;
   first_name: string;
+  last_name?: string;
+  full_name?: string;
   age: number;
-  profile_picture_url: string | null;
-  distance: number;
+  gender?: string;
+  avatar?: string | null;
+  avatar_url?: string | null;
+  checked_in_at: string;
+  has_match?: boolean;
+  match_id?: number | null;
+  is_revealed?: boolean;
+  reveal_id?: number | null;
+  reveal_direction?: "sent" | "received" | null;
+  similarities_count?: number;
+  highlights?: {
+    attributes?: { key: string; value: string }[];
+    interests?: { id: number; name: string; category?: string }[];
+  };
+  // Legacy fields for backwards compatibility
+  user_id?: number;
+  profile_picture_url?: string | null;
+  distance?: number;
   venue?: {
     id: number;
     name: string;
   };
-  checked_in_at: string;
 }
 
 export interface CheckInData {

@@ -1,42 +1,62 @@
 <script setup lang="ts">
-import type { Channel, Message } from '~/types/chat'
+import type { Channel } from '~/types/chat'
 
 interface Props {
   channels: Channel[]
-  selectedChannelId?: number | string
+  selectedChannelId?: number | null
   isLoading?: boolean
-  unreadCounts?: Record<number | string, number>
-  lastMessages?: Record<number | string, Message | null>
+  currentUserId?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
   isLoading: false,
-  unreadCounts: () => ({}),
-  lastMessages: () => ({})
 })
 
 const emit = defineEmits<{
-  selectChannel: [channelId: number | string]
+  selectChannel: [channelId: number]
 }>()
 
 const searchQuery = ref('')
+
+const getChannelName = (channel: Channel): string => {
+  // For direct channels, show the other member's name
+  if (channel.members && channel.members.length > 0) {
+    const member = channel.members[0]
+    return member.model?.full_name || member.model?.first_name || 'Unknown'
+  }
+  return 'Conversation'
+}
+
+const getChannelAvatar = (channel: Channel): string | null => {
+  if (channel.members && channel.members.length > 0) {
+    const model = channel.members[0]?.model
+    return model?.avatar_permanent_thumb_url || model?.avatar_permanent_url || null
+  }
+  return null
+}
+
+const getChannelInitials = (channel: Channel): string => {
+  const name = getChannelName(channel)
+  return name.charAt(0).toUpperCase()
+}
 
 const filteredChannels = computed(() => {
   if (!searchQuery.value.trim()) return props.channels
 
   const query = searchQuery.value.toLowerCase()
   return props.channels.filter(ch => {
-    const name = (ch.name || '').toLowerCase()
-    const type = (ch.type || '').toLowerCase()
-    return name.includes(query) || type.includes(query)
+    const name = getChannelName(ch).toLowerCase()
+    return name.includes(query)
   })
 })
 
-const formatLastMessage = (message: Message | null | undefined) => {
+const formatLastMessage = (channel: Channel): string => {
+  const message = channel.last_message
   if (!message) return 'No messages yet'
 
-  const preview = message.content.substring(0, 50)
-  return preview.length < message.content.length ? preview + '...' : preview
+  const content = message.data || ''
+  const preview = content.substring(0, 50)
+  return preview.length < content.length ? preview + '...' : preview
 }
 
 const formatLastMessageTime = (timestamp: string) => {
@@ -51,17 +71,6 @@ const formatLastMessageTime = (timestamp: string) => {
   if (diffHours < 24) return `${diffHours}h`
   if (diffHours < 48) return 'yesterday'
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-const getChannelInitials = (channel: Channel) => {
-  if (channel.type === 'direct') {
-    return channel.name?.charAt(0).toUpperCase() || '?'
-  }
-  return channel.name?.slice(0, 2).toUpperCase() || '?'
-}
-
-const getUnreadCount = (channelId: number | string) => {
-  return props.unreadCounts[channelId] || 0
 }
 </script>
 
@@ -134,37 +143,44 @@ const getUnreadCount = (channelId: number | string) => {
         ]"
       >
         <!-- Avatar -->
-        <div
-          :class="[
-            'flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-sm font-semibold text-white',
-            channel.type === 'direct'
-              ? 'bg-gradient-to-br from-primary-500 to-primary-700'
-              : 'bg-gradient-to-br from-accent-500 to-accent-700'
-          ]"
-        >
-          {{ getChannelInitials(channel) }}
+        <div class="flex-shrink-0 w-12 h-12 rounded-full overflow-hidden">
+          <img
+            v-if="getChannelAvatar(channel)"
+            :src="getChannelAvatar(channel)!"
+            :alt="getChannelName(channel)"
+            class="w-full h-full object-cover"
+          />
+          <div
+            v-else
+            :class="[
+              'w-full h-full flex items-center justify-center text-sm font-semibold text-white',
+              'bg-gradient-to-br from-primary-500 to-primary-700'
+            ]"
+          >
+            {{ getChannelInitials(channel) }}
+          </div>
         </div>
 
         <!-- Content -->
         <div class="flex-1 min-w-0">
           <div class="flex items-center justify-between gap-2 mb-1">
-            <h3 class="font-semibold text-gray-900 truncate">{{ channel.name }}</h3>
-            <span v-if="lastMessages[channel.id]?.created_at" class="text-xs text-gray-500 flex-shrink-0">
-              {{ formatLastMessageTime(lastMessages[channel.id]!.created_at) }}
+            <h3 class="font-semibold text-gray-900 truncate">{{ getChannelName(channel) }}</h3>
+            <span v-if="channel.last_message?.created_at" class="text-xs text-gray-500 flex-shrink-0">
+              {{ formatLastMessageTime(channel.last_message.created_at) }}
             </span>
           </div>
 
           <div class="flex items-center justify-between gap-2">
             <p class="text-sm text-gray-500 truncate">
-              {{ formatLastMessage(lastMessages[channel.id]) }}
+              {{ formatLastMessage(channel) }}
             </p>
 
             <!-- Unread Badge -->
             <div
-              v-if="getUnreadCount(channel.id) > 0"
+              v-if="channel.unread_count > 0"
               class="flex-shrink-0 w-6 h-6 bg-primary-500 text-white rounded-full flex items-center justify-center text-xs font-bold"
             >
-              {{ getUnreadCount(channel.id) > 99 ? '99+' : getUnreadCount(channel.id) }}
+              {{ channel.unread_count > 99 ? '99+' : channel.unread_count }}
             </div>
           </div>
         </div>

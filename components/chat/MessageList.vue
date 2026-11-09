@@ -3,7 +3,7 @@ import type { Message } from '~/types/chat'
 
 interface Props {
   messages: Message[]
-  currentUserId: number | string
+  currentUserId: number
   isLoading?: boolean
   hasMore?: boolean
   isLoadingMore?: boolean
@@ -33,6 +33,26 @@ watch(() => props.messages, scrollToBottom, { deep: true })
 
 onMounted(scrollToBottom)
 
+const getSenderName = (message: Message): string => {
+  return message.sender?.model?.first_name || 'User'
+}
+
+const getSenderAvatar = (message: Message): string | undefined => {
+  const model = message.sender?.model
+  return model?.avatar_permanent_thumb_url || model?.avatar_permanent_url || undefined
+}
+
+const getMessageContent = (message: Message): string => {
+  if (typeof message.data === 'string') return message.data
+  return ''
+}
+
+// Check if sender model_id matches current user
+const isMine = (message: Message): boolean => {
+  const senderUserId = message.sender?.model_id || message.sender?.model?.id
+  return senderUserId === props.currentUserId
+}
+
 const formatTime = (timestamp: string) => {
   const date = new Date(timestamp)
   const now = new Date()
@@ -49,10 +69,12 @@ const formatTime = (timestamp: string) => {
 
 const isConsecutive = (current: Message, previous: Message | undefined): boolean => {
   if (!previous) return false
-  if (current.user_id !== previous.user_id) return false
+  const currentSender = current.sender?.model_id || current.sender?.model?.id
+  const previousSender = previous.sender?.model_id || previous.sender?.model?.id
+  if (currentSender !== previousSender) return false
   const currentTime = new Date(current.created_at).getTime()
   const previousTime = new Date(previous.created_at).getTime()
-  return currentTime - previousTime < 60000 // 1 minute
+  return currentTime - previousTime < 60000
 }
 </script>
 
@@ -111,7 +133,7 @@ const isConsecutive = (current: Message, previous: Message | undefined): boolean
         <div
           :class="[
             'flex gap-3 animate-fade-in',
-            message.user_id === currentUserId ? 'flex-row-reverse' : 'flex-row'
+            isMine(message) ? 'flex-row-reverse' : 'flex-row'
           ]"
         >
           <!-- Avatar -->
@@ -120,8 +142,8 @@ const isConsecutive = (current: Message, previous: Message | undefined): boolean
             class="flex-shrink-0"
           >
             <UiAvatar
-              :src="message.user?.profile_picture_url"
-              :alt="message.user?.first_name || 'User'"
+              :src="getSenderAvatar(message)"
+              :alt="getSenderName(message)"
               size="sm"
             />
           </div>
@@ -130,80 +152,50 @@ const isConsecutive = (current: Message, previous: Message | undefined): boolean
           <!-- Message Bubble -->
           <div :class="[
             'max-w-xs lg:max-w-md',
-            message.user_id === currentUserId ? 'items-end' : 'items-start'
+            isMine(message) ? 'items-end' : 'items-start'
           ]">
             <!-- User Name (for first message in series) -->
             <p
               v-if="!isConsecutive(message, messages[index - 1])"
               :class="[
                 'text-xs font-semibold mb-1 px-3',
-                message.user_id === currentUserId ? 'text-right text-primary-600' : 'text-left text-gray-600'
+                isMine(message) ? 'text-right text-primary-600' : 'text-left text-gray-600'
               ]"
             >
-              {{ message.user_id === currentUserId ? 'You' : message.user?.first_name }}
+              {{ isMine(message) ? 'You' : getSenderName(message) }}
             </p>
 
             <!-- Message Content -->
             <div
               :class="[
                 'px-4 py-2 rounded-2xl break-words',
-                message.user_id === currentUserId
+                isMine(message)
                   ? 'bg-primary-500 text-white rounded-br-none'
                   : 'bg-gray-200 text-gray-900 rounded-bl-none'
               ]"
             >
-              {{ message.content }}
+              {{ getMessageContent(message) }}
             </div>
 
-            <!-- Timestamp & Status -->
+            <!-- Timestamp & Read Status -->
             <div
               :class="[
                 'flex items-center gap-1 text-xs mt-1 px-3',
-                message.user_id === currentUserId ? 'justify-end' : 'justify-start'
+                isMine(message) ? 'justify-end' : 'justify-start'
               ]"
             >
               <span class="text-gray-500">
                 {{ formatTime(message.created_at) }}
               </span>
-              <div v-if="message.user_id === currentUserId" class="flex items-center gap-0.5">
-                <!-- Message Status Indicator -->
-                <svg
-                  v-if="message.status === 'pending'"
-                  class="w-3 h-3 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <circle cx="12" cy="12" r="1"/>
-                </svg>
-                <svg
-                  v-else-if="message.status === 'sent'"
-                  class="w-3 h-3 text-gray-300"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                </svg>
-                <svg
-                  v-else-if="message.status === 'delivered'"
-                  class="w-3 h-3 text-blue-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7 20H5a2 2 0 01-2-2V7a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2h-5l-4 4z" />
-                </svg>
-                <svg
-                  v-else-if="message.status === 'error'"
-                  class="w-3 h-3 text-red-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4v2m0 0v2m0-2v-2m0 0H9m3 0h3" />
-                </svg>
-              </div>
+              <svg
+                v-if="isMine(message) && message.is_read"
+                class="w-3 h-3 text-blue-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
             </div>
           </div>
         </div>

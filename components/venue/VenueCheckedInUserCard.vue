@@ -16,21 +16,23 @@ const { sendReveal, isLoading: isSendingReveal } = useMatches()
 
 // Local state
 const revealRequested = ref(false)
-const revealAccepted = ref(false)
 const error = ref<string | null>(null)
 const isExpanded = ref(false)
 
-// Check if this user has already revealed to us (would come from backend in real implementation)
+// Use API's is_revealed field, fall back to local state for optimistic UI
 const isRevealed = computed(() => {
-  // In a real implementation, this would check against the user's reveal status
-  // For now, we simulate it with the local revealAccepted state
-  return revealAccepted.value
+  return props.user.is_revealed === true
+})
+
+const hasRevealPending = computed(() => {
+  return revealRequested.value || props.user.reveal_direction === 'sent'
 })
 
 const handleRequestReveal = async () => {
   try {
     error.value = null
-    await sendReveal(props.user.user_id, props.user.venue?.id)
+    const userId = props.user.id
+    await sendReveal(userId, props.user.venue?.id)
     revealRequested.value = true
   } catch (err) {
     console.error('Failed to request reveal:', err)
@@ -71,7 +73,7 @@ const toggleExpanded = () => {
       <!-- Blurred Avatar -->
       <div class="flex-shrink-0">
         <UiBlurredAvatar
-          :src="user.profile_picture_url"
+          :src="user.avatar_url || user.avatar || user.profile_picture_url"
           :name="user.first_name"
           :blurred="!isRevealed"
           size="md"
@@ -106,7 +108,7 @@ const toggleExpanded = () => {
 
       <!-- Action Button -->
       <div class="flex-shrink-0">
-        <template v-if="!revealRequested && !isRevealed">
+        <template v-if="!hasRevealPending && !isRevealed">
           <UiButton
             @click.stop="handleRequestReveal"
             :loading="isSendingReveal"
@@ -121,7 +123,7 @@ const toggleExpanded = () => {
             Reveal
           </UiButton>
         </template>
-        <template v-else-if="revealRequested && !isRevealed">
+        <template v-else-if="hasRevealPending && !isRevealed">
           <div class="flex items-center gap-1.5 text-sm text-amber-600 font-medium px-2 py-1 bg-amber-50 rounded-lg">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -174,7 +176,7 @@ const toggleExpanded = () => {
           <!-- Quick Actions -->
           <div class="flex gap-2">
             <UiButton
-              v-if="!revealRequested && !isRevealed"
+              v-if="!hasRevealPending && !isRevealed"
               @click="handleRequestReveal"
               :loading="isSendingReveal"
               size="sm"
